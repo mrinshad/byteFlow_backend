@@ -11,6 +11,12 @@ export function requireRole(...allowedRoles: Role[]) {
       return;
     }
 
+    // SUPER_ADMIN has access to everything
+    if (req.user.role === Role.SUPER_ADMIN) {
+      next();
+      return;
+    }
+
     if (!allowedRoles.includes(req.user.role)) {
       res.status(403).json({
         success: false,

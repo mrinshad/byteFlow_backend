@@ -78,7 +78,8 @@ export class AdminController {
       }
 
       const performedBy = req.user?.id;
-      const updated = await AdminService.toggleLockUser(id, isLocked, performedBy);
+      const callerRole = req.user?.role;
+      const updated = await AdminService.toggleLockUser(id, isLocked, performedBy, callerRole);
       res.json({ success: true, data: updated });
     } catch (error) {
       next(error);
@@ -89,7 +90,8 @@ export class AdminController {
     try {
       const id = req.params.id as string;
       const performedBy = req.user?.id;
-      const result = await AdminService.deleteUser(id, performedBy);
+      const callerRole = req.user?.role;
+      const result = await AdminService.deleteUser(id, performedBy, callerRole);
       res.json(result);
     } catch (error) {
       next(error);
@@ -100,7 +102,8 @@ export class AdminController {
     try {
       const id = req.params.id as string;
       const performedBy = req.user?.id;
-      const result = await AdminService.restoreUser(id, performedBy);
+      const callerRole = req.user?.role;
+      const result = await AdminService.restoreUser(id, performedBy, callerRole);
       res.json(result);
     } catch (error) {
       next(error);
@@ -120,7 +123,8 @@ export class AdminController {
         return;
       }
 
-      const updated = await AdminService.updateUserRole(id, role);
+      const callerRole = req.user?.role;
+      const updated = await AdminService.updateUserRole(id, role, callerRole);
       res.json({ success: true, data: updated });
     } catch (error) {
       next(error);
@@ -140,7 +144,8 @@ export class AdminController {
         return;
       }
 
-      const result = await AdminService.resetUserPassword(id, password);
+      const callerRole = req.user?.role;
+      const result = await AdminService.resetUserPassword(id, password, callerRole);
       res.json(result);
     } catch (error) {
       next(error);

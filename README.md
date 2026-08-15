@@ -35,6 +35,18 @@ npm run dev
 ```
 The server will start on `http://localhost:5000`.
 
+### 4. Run Multi-Level Stress & Functional Test Suite
+```bash
+npm run test:stress
+```
+Executes all 6 levels of automated tests:
+- **Level 1**: Authentication, Super Admin authority, account locking, deactivation.
+- **Level 2**: Projects, role-based isolation, cascading soft-delete, and restoration.
+- **Level 3**: Kanban boards, concurrent card creations & lane moves, position reordering.
+- **Level 4**: Real-time `@mentions`, comment notification generation, batch mark-as-read.
+- **Level 5**: Workspace audit logs explorer pagination, filters, and dashboard metrics.
+- **Level 6**: Frontend UI smoke tests on all Next.js routes.
+
 ## API Endpoints
 
 ### System & Health

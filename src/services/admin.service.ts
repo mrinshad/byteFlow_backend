@@ -51,6 +51,7 @@ export class AdminService {
     const completionRate = totalCards > 0 ? Math.round((totalCompletedCards / totalCards) * 100) : 0;
 
     const roleCounts = {
+      SUPER_ADMIN: 0,
       ADMIN: 0,
       MANAGER: 0,
       MEMBER: 0,
@@ -341,7 +342,7 @@ export class AdminService {
     }));
   }
 
-  static async toggleLockUser(userId: string, isLocked: boolean, performedBy?: string) {
+  static async toggleLockUser(userId: string, isLocked: boolean, performedBy?: string, callerRole?: Role) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -350,10 +351,21 @@ export class AdminService {
       throw { statusCode: 404, message: 'User not found' };
     }
 
+    // Super Admin cannot be locked
+    if (user.role === Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Super Administrator accounts cannot be locked' };
+    }
+
+    // Standard Admin cannot lock/unlock other Admins
+    if (user.role === Role.ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can lock or unlock Administrator accounts' };
+    }
+
     if (user.role === Role.ADMIN && isLocked) {
-      // Prevent locking the primary admin account
-      const adminCount = await prisma.user.count({ where: { role: Role.ADMIN, isLocked: false, deletedAt: null } });
-      if (adminCount <= 1) {
+      const activeAdminCount = await prisma.user.count({
+        where: { role: { in: [Role.ADMIN, Role.SUPER_ADMIN] }, isLocked: false, deletedAt: null },
+      });
+      if (activeAdminCount <= 1) {
         throw { statusCode: 400, message: 'Cannot lock the only active administrator account' };
       }
     }
@@ -374,7 +386,7 @@ export class AdminService {
     return updated;
   }
 
-  static async deleteUser(userId: string, performedBy?: string) {
+  static async deleteUser(userId: string, performedBy?: string, callerRole?: Role) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -383,11 +395,14 @@ export class AdminService {
       throw { statusCode: 404, message: 'User not found' };
     }
 
-    if (user.role === Role.ADMIN) {
-      const activeAdminCount = await prisma.user.count({ where: { role: Role.ADMIN, deletedAt: null } });
-      if (activeAdminCount <= 1) {
-        throw { statusCode: 400, message: 'Cannot deactivate the only administrator account' };
-      }
+    // Super Admin cannot be deleted
+    if (user.role === Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Super Administrator accounts cannot be deactivated' };
+    }
+
+    // Standard Admin cannot delete other Admins
+    if (user.role === Role.ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can deactivate Administrator accounts' };
     }
 
     const updated = await prisma.user.update({
@@ -406,13 +421,17 @@ export class AdminService {
     return { success: true, message: `User @${user.username} deactivated successfully` };
   }
 
-  static async restoreUser(userId: string, performedBy?: string) {
+  static async restoreUser(userId: string, performedBy?: string, callerRole?: Role) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
 
     if (!user) {
       throw { statusCode: 404, message: 'User not found' };
+    }
+
+    if (user.role === Role.ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can restore Administrator accounts' };
     }
 
     await prisma.user.update({
@@ -426,7 +445,7 @@ export class AdminService {
     return { success: true, message: `User @${user.username} restored successfully` };
   }
 
-  static async updateUserRole(userId: string, role: Role) {
+  static async updateUserRole(userId: string, role: Role, callerRole?: Role) {
     if (!Object.values(Role).includes(role)) {
       throw { statusCode: 400, message: `Invalid role: ${role}` };
     }
@@ -437,6 +456,21 @@ export class AdminService {
 
     if (!user) {
       throw { statusCode: 404, message: 'User not found' };
+    }
+
+    // Protection: Only Super Admin can change a Super Admin's role
+    if (user.role === Role.SUPER_ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can alter Super Administrator accounts' };
+    }
+
+    // Protection: Only Super Admin can alter an Admin's role
+    if (user.role === Role.ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can alter Administrator roles' };
+    }
+
+    // Protection: Only Super Admin can promote someone to Admin or Super Admin
+    if ((role === Role.ADMIN || role === Role.SUPER_ADMIN) && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can assign Administrator or Super Administrator roles' };
     }
 
     const updated = await prisma.user.update({
@@ -455,7 +489,7 @@ export class AdminService {
     return updated;
   }
 
-  static async resetUserPassword(userId: string, newPassword: string) {
+  static async resetUserPassword(userId: string, newPassword: string, callerRole?: Role) {
     if (!newPassword || newPassword.length < 6) {
       throw { statusCode: 400, message: 'Password must be at least 6 characters' };
     }
@@ -466,6 +500,16 @@ export class AdminService {
 
     if (!user) {
       throw { statusCode: 404, message: 'User not found' };
+    }
+
+    // Only Super Admin can reset password of Super Admin
+    if (user.role === Role.SUPER_ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can reset the password of a Super Administrator' };
+    }
+
+    // Only Super Admin can reset password of Admin
+    if (user.role === Role.ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can reset the password of an Administrator' };
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);

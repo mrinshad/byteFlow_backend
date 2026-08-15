@@ -48,8 +48,8 @@ export class AuthService {
       throw { statusCode: 400, message: 'Password must be at least 6 characters' };
     }
 
-    // Enforce 10-user limit only when creating a new user and pressing submit
-    const userCount = await prisma.user.count();
+    // Enforce 10-user limit only when creating a new active user
+    const userCount = await prisma.user.count({ where: { deletedAt: null } });
     if (userCount >= 10) {
       throw { statusCode: 400, message: 'User limit reached. Maximum 10 users allowed.' };
     }

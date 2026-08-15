@@ -119,8 +119,8 @@ export class ProjectService {
       deletedAt: null,
     };
 
-    // If user is not ADMIN, only show projects they are a member of or created
-    if (params.userRole && params.userRole !== Role.ADMIN && params.userId) {
+    // If user is not ADMIN or SUPER_ADMIN, only show projects they are a member of or created
+    if (params.userRole && params.userRole !== Role.ADMIN && params.userRole !== Role.SUPER_ADMIN && params.userId) {
       where.OR = [
         { members: { some: { userId: params.userId } } },
         { createdBy: params.userId },
@@ -228,7 +228,7 @@ export class ProjectService {
     }
 
     // Check if user has access to this project
-    if (userRole && userRole !== Role.ADMIN && userId) {
+    if (userRole && userRole !== Role.ADMIN && userRole !== Role.SUPER_ADMIN && userId) {
       const isMember = project.members.some((m) => m.userId === userId);
       const isCreator = project.createdBy === userId;
       if (!isMember && !isCreator) {
@@ -300,8 +300,8 @@ export class ProjectService {
       throw { statusCode: 404, message: 'Project not found' };
     }
 
-    // Role check: Only ADMIN or project creator can delete
-    if (userRole && userRole !== Role.ADMIN && performedBy !== existing.createdBy) {
+    // Role check: Only ADMIN, SUPER_ADMIN, or project creator can delete
+    if (userRole && userRole !== Role.ADMIN && userRole !== Role.SUPER_ADMIN && performedBy !== existing.createdBy) {
       throw { statusCode: 403, message: 'Only administrators or the project creator can delete this project' };
     }
 

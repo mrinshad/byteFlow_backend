@@ -49,6 +49,39 @@ export class ProjectService {
         },
       });
 
+      // Create default lanes
+      const defaultLanes = [
+        { name: 'Todo', color: '#3b82f6', position: 65536 },
+        { name: 'In Progress', color: '#f59e0b', position: 131072 },
+        { name: 'Done', color: '#10b981', position: 196608 },
+      ];
+
+      for (const lane of defaultLanes) {
+        const created = await tx.lane.create({
+          data: {
+            projectId: project.id,
+            name: lane.name,
+            color: lane.color,
+            position: lane.position,
+            createdBy: input.createdBy || null,
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            projectId: project.id,
+            laneId: created.id,
+            performedBy: input.createdBy || null,
+            action: ActivityAction.CREATE_LANE,
+            newValue: {
+              name: created.name,
+              color: created.color,
+              position: created.position,
+            },
+          },
+        });
+      }
+
       return project;
     });
   }

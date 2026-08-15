@@ -4,6 +4,8 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import cors from 'cors';
 import { prisma } from './prisma.js';
 import { initSocket } from './socket.js';
+import { authenticate } from './middleware/auth.middleware.js';
+import authRoutes from './routes/auth.routes.js';
 import projectRoutes from './routes/project.routes.js';
 import laneRoutes from './routes/lane.routes.js';
 import cardRoutes from './routes/card.routes.js';
@@ -23,7 +25,7 @@ initSocket(httpServer);
 app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3000', credentials: true }));
 app.use(express.json());
 
-// Health Check
+// Health Check (public)
 app.get('/api/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -33,14 +35,17 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// Routes
-app.use('/api/projects', projectRoutes);
-app.use('/api/lanes', laneRoutes);
-app.use('/api/cards', cardRoutes);
-app.use('/api/comments', commentRoutes);
-app.use('/api/tags', tagRoutes);
-app.use('/api/activities', activityRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+// Auth Routes (public - register, login; protected - me)
+app.use('/api/auth', authRoutes);
+
+// Protected Routes - require authentication
+app.use('/api/projects', authenticate, projectRoutes);
+app.use('/api/lanes', authenticate, laneRoutes);
+app.use('/api/cards', authenticate, cardRoutes);
+app.use('/api/comments', authenticate, commentRoutes);
+app.use('/api/tags', authenticate, tagRoutes);
+app.use('/api/activities', authenticate, activityRoutes);
+app.use('/api/dashboard', authenticate, dashboardRoutes);
 
 // Error handling middleware
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

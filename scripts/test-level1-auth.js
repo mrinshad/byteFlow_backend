@@ -19,36 +19,32 @@ export async function runLevel1() {
   assertions++;
   console.log('  ✔ Super Admin login verified');
 
-  // 2. Create a test standard Admin and test Member
+  // 2. Test User Creation in Admin Section & Role Restrictions
   const testAdminUser = `test_adm_${Date.now()}`;
   const testMemberUser = `test_mem_${Date.now()}`;
+  const testManagerUser = `test_mgr_${Date.now()}`;
 
-  // Register standard Member
-  res = await fetch(`${API}/auth/register`, {
+  // 2a. Attempt to create another SUPER_ADMIN -> Must be rejected with 400
+  res = await fetch(`${API}/admin/users`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Test Member', username: testMemberUser, password: 'password123' }),
-  });
-  const memberObj = (await res.json()).data?.user;
-  assert(memberObj, 'Member registration failed');
-  assertions++;
-
-  // Super Admin promotes test Admin
-  res = await fetch(`${API}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Test Admin', username: testAdminUser, password: 'password123' }),
-  });
-  const adminObj = (await res.json()).data?.user;
-  assert(adminObj, 'Admin user creation failed');
-
-  res = await fetch(`${API}/admin/users/${adminObj.id}/role`, {
-    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${superAdminToken}` },
-    body: JSON.stringify({ role: 'ADMIN' }),
+    body: JSON.stringify({ name: 'Fake Super', username: `fake_super_${Date.now()}`, password: 'password123', role: 'SUPER_ADMIN' }),
   });
-  assert.strictEqual(res.status, 200, 'Super Admin promotion to ADMIN failed');
+  assert.strictEqual(res.status, 400, 'Creating another SUPER_ADMIN must return 400');
   assertions++;
+  console.log('  ✔ Single Super Admin rule verified (Creation of second Super Admin rejected with 400)');
+
+  // 2b. Super Admin creates a new ADMIN user
+  res = await fetch(`${API}/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${superAdminToken}` },
+    body: JSON.stringify({ name: 'Test Admin', username: testAdminUser, password: 'password123', role: 'ADMIN' }),
+  });
+  assert.strictEqual(res.status, 201, 'Super Admin must be able to create new ADMIN users');
+  const adminObj = (await res.json()).data;
+  assert.strictEqual(adminObj.role, 'ADMIN');
+  assertions += 2;
+  console.log('  ✔ Super Admin created new Administrator user successfully');
 
   // Standard Admin logs in
   res = await fetch(`${API}/auth/login`, {
@@ -57,7 +53,41 @@ export async function runLevel1() {
     body: JSON.stringify({ username: testAdminUser, password: 'password123' }),
   });
   const adminToken = (await res.json()).data.token;
-  console.log('  ✔ Standard Admin created and authenticated');
+  assert(adminToken, 'Admin login failed');
+  assertions++;
+  console.log('  ✔ Standard Admin authenticated');
+
+  // 2c. Standard Admin attempts to create an ADMIN user -> 403 Forbidden
+  res = await fetch(`${API}/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ name: 'Sub Admin', username: `sub_adm_${Date.now()}`, password: 'password123', role: 'ADMIN' }),
+  });
+  assert.strictEqual(res.status, 403, 'Standard Admin must not be able to create other ADMIN users');
+  assertions++;
+  console.log('  ✔ Standard Admin creation restriction verified (403 Forbidden when creating ADMIN)');
+
+  // 2d. Standard Admin creates a MANAGER user -> 201 Created
+  res = await fetch(`${API}/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ name: 'Test Manager', username: testManagerUser, password: 'password123', role: 'MANAGER' }),
+  });
+  assert.strictEqual(res.status, 201, 'Standard Admin must be able to create MANAGER users');
+  const managerObj = (await res.json()).data;
+  assert.strictEqual(managerObj.role, 'MANAGER');
+  assertions += 2;
+  console.log('  ✔ Standard Admin created new Manager user successfully');
+
+  // 2e. Register standard Member
+  res = await fetch(`${API}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Test Member', username: testMemberUser, password: 'password123' }),
+  });
+  const memberObj = (await res.json()).data?.user;
+  assert(memberObj, 'Member registration failed');
+  assertions++;
 
   // 3. Negative Governance Tests: Standard Admin CANNOT alter Super Admin or other Admin
   // 3a. Admin attempts to change Super Admin role -> 403
@@ -132,6 +162,10 @@ export async function runLevel1() {
 
   // Cleanup test users
   await fetch(`${API}/admin/users/${memberObj.id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${superAdminToken}` },
+  });
+  await fetch(`${API}/admin/users/${managerObj.id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${superAdminToken}` },
   });

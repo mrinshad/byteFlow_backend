@@ -64,6 +64,28 @@ export class AdminController {
     }
   }
 
+  static async createUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { name, username, password, role } = req.body;
+      const callerRole = req.user?.role;
+      const performedBy = req.user?.id;
+
+      const newUser = await AdminService.createUser(
+        { name, username, password, role },
+        callerRole,
+        performedBy
+      );
+
+      res.status(201).json({
+        success: true,
+        data: newUser,
+        message: `User @${newUser.username} created successfully`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async toggleLockUser(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;

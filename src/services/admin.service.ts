@@ -468,9 +468,14 @@ export class AdminService {
       throw { statusCode: 403, message: 'Only a Super Administrator can alter Administrator roles' };
     }
 
-    // Protection: Only Super Admin can promote someone to Admin or Super Admin
-    if ((role === Role.ADMIN || role === Role.SUPER_ADMIN) && callerRole !== Role.SUPER_ADMIN) {
-      throw { statusCode: 403, message: 'Only a Super Administrator can assign Administrator or Super Administrator roles' };
+    // Protection: Disallow promoting anyone to Super Admin (only 1 Super Admin allowed)
+    if (role === Role.SUPER_ADMIN) {
+      throw { statusCode: 400, message: 'There can only be one Super Administrator in the system' };
+    }
+
+    // Protection: Only Super Admin can promote someone to Admin
+    if (role === Role.ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only a Super Administrator can assign Administrator roles' };
     }
 
     const updated = await prisma.user.update({
@@ -520,6 +525,75 @@ export class AdminService {
     });
 
     return { success: true, message: `Password reset successfully for @${user.username}` };
+  }
+
+  static async createUser(
+    input: {
+      name: string;
+      username: string;
+      password: string;
+      role?: Role;
+    },
+    callerRole?: Role,
+    performedBy?: string
+  ) {
+    const trimmedName = input.name?.trim();
+    const trimmedUsername = input.username?.trim();
+    const password = input.password;
+    const role = input.role || Role.MEMBER;
+
+    if (!trimmedName) {
+      throw { statusCode: 400, message: 'Name is required' };
+    }
+    if (!trimmedUsername) {
+      throw { statusCode: 400, message: 'Username is required' };
+    }
+    if (!password || password.length < 6) {
+      throw { statusCode: 400, message: 'Password must be at least 6 characters' };
+    }
+
+    // Constraint: Single Super Admin rule
+    if (role === Role.SUPER_ADMIN) {
+      throw { statusCode: 400, message: 'There can only be one Super Administrator in the system' };
+    }
+
+    // Constraint: Standard Admin cannot create another Admin
+    if (role === Role.ADMIN && callerRole !== Role.SUPER_ADMIN) {
+      throw { statusCode: 403, message: 'Only Super Administrator can create Administrator accounts' };
+    }
+
+    // Limit check: active users <= 10
+    const userCount = await prisma.user.count({ where: { deletedAt: null } });
+    if (userCount >= 10) {
+      throw { statusCode: 400, message: 'User limit reached. Maximum 10 active users allowed.' };
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { username: trimmedUsername },
+    });
+    if (existing) {
+      throw { statusCode: 400, message: 'Username is already taken' };
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await prisma.user.create({
+      data: {
+        name: trimmedName,
+        username: trimmedUsername,
+        password: hashedPassword,
+        role,
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    return newUser;
   }
 
   static async getActivityLogs(filters?: {

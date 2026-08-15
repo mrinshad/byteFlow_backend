@@ -143,9 +143,9 @@ async function runBrowserUITest() {
     console.log(`  ✔ Toggled deleted filter: "${toggledText?.trim()}"`);
 
     // -------------------------------------------------------------
-    // TEST 6: Admin Users Governance & Super Admin Controls (/admin/users)
+    // TEST 6: Admin Users Governance, Add User Dialog & Super Admin Controls (/admin/users)
     // -------------------------------------------------------------
-    console.log('\n🔹 6. Testing Admin User Directory & Super Admin Governance (/admin/users)');
+    console.log('\n🔹 6. Testing Admin User Directory & Create User Modal (/admin/users)');
     await page.goto(`${FRONTEND_URL}/admin/users`, { waitUntil: 'networkidle2' });
     await page.waitForSelector('table', { timeout: 5000 });
 
@@ -156,6 +156,44 @@ async function runBrowserUITest() {
     });
     assert(superAdminBadge, 'Super Admin Access indicator must be visible in header');
     console.log('  ✔ "Super Admin Access" indicator verified on User Directory page');
+
+    // Test "Add User" Dialog Trigger
+    const addUserBtn = await page.evaluateHandle(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      return buttons.find((b) => b.textContent && b.textContent.includes('Add User'));
+    });
+    assert(await page.evaluate((el) => !!el, addUserBtn), 'Add User button must exist');
+    await addUserBtn.asElement().click();
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Verify dialog opened
+    const dialogTitle = await page.evaluate(() => {
+      const el = document.querySelector('[role="dialog"] h2');
+      return el?.textContent || null;
+    });
+    assert(dialogTitle && dialogTitle.includes('Create New User'), 'Create New User dialog must open');
+    console.log(`  ✔ "Create New User" dialog opened: "${dialogTitle?.trim()}"`);
+
+    // Verify role options in modal: must contain ADMIN, MANAGER, MEMBER, but NOT SUPER_ADMIN
+    const modalRoleOptions = await page.evaluate(() => {
+      const select = document.querySelector('[role="dialog"] select');
+      if (!select) return [];
+      return Array.from(select.options).map((o) => o.value);
+    });
+    assert(modalRoleOptions.includes('ADMIN'), 'Modal role options must include ADMIN for Super Admin');
+    assert(modalRoleOptions.includes('MANAGER'), 'Modal role options must include MANAGER');
+    assert(modalRoleOptions.includes('MEMBER'), 'Modal role options must include MEMBER');
+    assert(!modalRoleOptions.includes('SUPER_ADMIN'), 'Modal role options must NOT allow creating SUPER_ADMIN');
+    console.log('  ✔ Create User modal role choices validated:', modalRoleOptions.join(', '));
+
+    // Close dialog
+    const cancelBtn = await page.evaluateHandle(() => {
+      const buttons = Array.from(document.querySelectorAll('[role="dialog"] button'));
+      return buttons.find((b) => b.textContent && b.textContent.includes('Cancel'));
+    });
+    await cancelBtn.asElement().click();
+    await new Promise((r) => setTimeout(r, 300));
+    console.log('  ✔ Create User modal dismissed');
 
     // Count user rows in table
     const userRows = await page.$$('tbody tr');
@@ -168,7 +206,7 @@ async function runBrowserUITest() {
     });
     console.log(`  ✔ Active status badges rendered: ${activeBadgesCount}`);
 
-    // Check role selectors
+    // Check role selectors in table
     const roleSelects = await page.$$('tbody select');
     console.log(`  ✔ Role selector dropdowns active: ${roleSelects.length}`);
 

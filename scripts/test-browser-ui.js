@@ -149,13 +149,10 @@ async function runBrowserUITest() {
     await page.goto(`${FRONTEND_URL}/admin/users`, { waitUntil: 'networkidle2' });
     await page.waitForSelector('table', { timeout: 5000 });
 
-    // Verify Super Admin access badge is visible
-    const superAdminBadge = await page.evaluate(() => {
-      const spans = Array.from(document.querySelectorAll('span'));
-      return spans.some((s) => s.textContent && s.textContent.includes('Super Admin Access'));
-    });
-    assert(superAdminBadge, 'Super Admin Access indicator must be visible in header');
-    console.log('  ✔ "Super Admin Access" indicator verified on User Directory page');
+    // Verify clean Users heading
+    const pageHeading = await page.$eval('h1', (el) => el.textContent);
+    assert(pageHeading && pageHeading.includes('Users'), 'Users heading must be rendered');
+    console.log(`  ✔ Clean page heading verified: "${pageHeading?.trim()}"`);
 
     // Test "Add User" Dialog Trigger
     const addUserBtn = await page.evaluateHandle(() => {

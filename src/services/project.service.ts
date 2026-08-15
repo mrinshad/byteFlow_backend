@@ -1,16 +1,18 @@
 import { prisma } from '../prisma.js';
-import { ActivityAction } from '@prisma/client';
+import { ActivityAction, Role } from '@prisma/client';
 
 export interface CreateProjectInput {
   name: string;
   description?: string;
   createdBy?: string;
+  userRole?: Role;
 }
 
 export interface UpdateProjectInput {
   name?: string;
   description?: string;
   performedBy?: string;
+  userRole?: Role;
 }
 
 export interface GetProjectsQuery {
@@ -19,10 +21,17 @@ export interface GetProjectsQuery {
   limit?: number;
   sortBy?: 'name' | 'createdAt' | 'updatedAt';
   sortOrder?: 'asc' | 'desc';
+  userId?: string;
+  userRole?: Role;
 }
 
 export class ProjectService {
   static async createProject(input: CreateProjectInput) {
+    // Only ADMIN or MANAGER can create projects
+    if (input.userRole && input.userRole === Role.MEMBER) {
+      throw { statusCode: 403, message: 'Members do not have permission to create projects. Contact an admin.' };
+    }
+
     const trimmedName = input.name?.trim();
     if (!trimmedName) {
       throw { statusCode: 400, message: 'Project name is required' };
@@ -36,6 +45,16 @@ export class ProjectService {
           createdBy: input.createdBy || null,
         },
       });
+
+      // Auto-assign creator as project member if createdBy is provided
+      if (input.createdBy) {
+        await tx.projectMember.create({
+          data: {
+            projectId: project.id,
+            userId: input.createdBy,
+          },
+        });
+      }
 
       await tx.activityLog.create({
         data: {
@@ -98,11 +117,28 @@ export class ProjectService {
       deletedAt: null,
     };
 
-    if (search) {
+    // If user is not ADMIN, only show projects they are a member of or created
+    if (params.userRole && params.userRole !== Role.ADMIN && params.userId) {
       where.OR = [
+        { members: { some: { userId: params.userId } } },
+        { createdBy: params.userId },
+      ];
+    }
+
+    if (search) {
+      const searchCondition = [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
       ];
+      if (where.OR) {
+        where.AND = [
+          { OR: where.OR },
+          { OR: searchCondition },
+        ];
+        delete where.OR;
+      } else {
+        where.OR = searchCondition;
+      }
     }
 
     const [total, items] = await Promise.all([
@@ -113,10 +149,23 @@ export class ProjectService {
         take: limit,
         orderBy: { [sortBy]: sortOrder },
         include: {
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  role: true,
+                },
+              },
+            },
+          },
           _count: {
             select: {
               lanes: { where: { deletedAt: null } },
               cards: { where: { deletedAt: null } },
+              members: true,
             },
           },
         },
@@ -134,7 +183,7 @@ export class ProjectService {
     };
   }
 
-  static async getProjectById(id: string) {
+  static async getProjectById(id: string, userId?: string, userRole?: Role) {
     const project = await prisma.project.findFirst({
       where: {
         id,
@@ -150,10 +199,23 @@ export class ProjectService {
             },
           },
         },
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                role: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             cards: { where: { deletedAt: null } },
             tags: { where: { deletedAt: null } },
+            members: true,
           },
         },
       },
@@ -161,6 +223,15 @@ export class ProjectService {
 
     if (!project) {
       throw { statusCode: 404, message: 'Project not found' };
+    }
+
+    // Check if user has access to this project
+    if (userRole && userRole !== Role.ADMIN && userId) {
+      const isMember = project.members.some((m) => m.userId === userId);
+      const isCreator = project.createdBy === userId;
+      if (!isMember && !isCreator) {
+        throw { statusCode: 403, message: 'You do not have access to this project' };
+      }
     }
 
     return project;
@@ -173,6 +244,11 @@ export class ProjectService {
 
     if (!existing) {
       throw { statusCode: 404, message: 'Project not found' };
+    }
+
+    // Role check: Only ADMIN, MANAGER, or project creator can update
+    if (input.userRole && input.userRole === Role.MEMBER && input.performedBy !== existing.createdBy) {
+      throw { statusCode: 403, message: 'Only admins or project managers can alter project details' };
     }
 
     const updateData: any = {};
@@ -213,13 +289,18 @@ export class ProjectService {
     });
   }
 
-  static async deleteProject(id: string, performedBy?: string) {
+  static async deleteProject(id: string, performedBy?: string, userRole?: Role) {
     const existing = await prisma.project.findFirst({
       where: { id, deletedAt: null },
     });
 
     if (!existing) {
       throw { statusCode: 404, message: 'Project not found' };
+    }
+
+    // Role check: Only ADMIN or project creator can delete
+    if (userRole && userRole !== Role.ADMIN && performedBy !== existing.createdBy) {
+      throw { statusCode: 403, message: 'Only administrators or the project creator can delete this project' };
     }
 
     await prisma.$transaction(async (tx) => {

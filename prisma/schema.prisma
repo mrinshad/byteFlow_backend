@@ -6,16 +6,40 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
-  email     String   @unique
+  username  String   @unique
   password  String
+  role      Role     @default(MEMBER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([email])
+  projectMembers ProjectMember[]
+
+  @@index([username])
+  @@index([role])
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
 }
 
 enum Priority {
@@ -74,6 +98,7 @@ model Project {
   cards        Card[]
   tags         Tag[]
   activityLogs ActivityLog[]
+  members      ProjectMember[]
 
   @@index([deletedAt])
   @@index([createdAt])

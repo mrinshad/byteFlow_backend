@@ -13,6 +13,7 @@ import commentRoutes from './routes/comment.routes.js';
 import tagRoutes from './routes/tag.routes.js';
 import activityRoutes from './routes/activity.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -46,6 +47,7 @@ app.use('/api/comments', authenticate, commentRoutes);
 app.use('/api/tags', authenticate, tagRoutes);
 app.use('/api/activities', authenticate, activityRoutes);
 app.use('/api/dashboard', authenticate, dashboardRoutes);
+app.use('/api/admin', authenticate, adminRoutes);
 
 // Error handling middleware
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

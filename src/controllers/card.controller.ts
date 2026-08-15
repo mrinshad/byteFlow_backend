@@ -7,6 +7,8 @@ export class CardController {
       const { projectId, laneId, title, description, priority, dueDate, assigneeId, createdBy } =
         req.body || {};
 
+      const author = createdBy || req.user?.name || req.user?.username;
+
       const card = await CardService.createCard({
         projectId,
         laneId,
@@ -15,7 +17,7 @@ export class CardController {
         priority,
         dueDate,
         assigneeId,
-        createdBy,
+        createdBy: author,
       });
 
       res.status(201).json({
@@ -30,7 +32,7 @@ export class CardController {
   static async listByProject(req: Request, res: Response, next: NextFunction) {
     try {
       const projectId = req.params.projectId as string;
-      const { laneId, priority, assigneeId, tagId, dueDateFilter, fromDate, toDate, search } =
+      const { laneId, priority, assigneeId, tagId, dueDateFilter, fromDate, toDate, search, includeDeleted } =
         req.query;
 
       const cards = await CardService.getCardsByProject(projectId, {
@@ -42,6 +44,7 @@ export class CardController {
         fromDate: typeof fromDate === 'string' ? fromDate : undefined,
         toDate: typeof toDate === 'string' ? toDate : undefined,
         search: typeof search === 'string' ? search : undefined,
+        includeDeleted: includeDeleted === 'true',
       });
 
       res.status(200).json({
@@ -71,6 +74,7 @@ export class CardController {
     try {
       const id = req.params.id as string;
       const { title, description, priority, dueDate, assigneeId, performedBy } = req.body || {};
+      const userPerformer = performedBy || req.user?.name || req.user?.username;
 
       const card = await CardService.updateCard(id, {
         title,
@@ -78,7 +82,7 @@ export class CardController {
         priority,
         dueDate,
         assigneeId,
-        performedBy,
+        performedBy: userPerformer,
       });
 
       res.status(200).json({
@@ -94,6 +98,7 @@ export class CardController {
     try {
       const id = req.params.id as string;
       const { targetLaneId, position, performedBy } = req.body || {};
+      const userPerformer = performedBy || req.user?.name || req.user?.username;
 
       if (!targetLaneId || position === undefined) {
         throw { statusCode: 400, message: 'targetLaneId and position are required' };
@@ -102,7 +107,7 @@ export class CardController {
       const card = await CardService.moveCard(id, {
         targetLaneId,
         position: Number(position),
-        performedBy,
+        performedBy: userPerformer,
       });
 
       res.status(200).json({
@@ -117,11 +122,13 @@ export class CardController {
   static async reorder(req: Request, res: Response, next: NextFunction) {
     try {
       const { projectId, items, performedBy } = req.body || {};
+      const userPerformer = performedBy || req.user?.name || req.user?.username;
+
       if (!projectId) {
         throw { statusCode: 400, message: 'Project ID is required for reordering' };
       }
 
-      const cards = await CardService.reorderCards(projectId, items, performedBy);
+      const cards = await CardService.reorderCards(projectId, items, userPerformer);
 
       res.status(200).json({
         success: true,
@@ -135,12 +142,27 @@ export class CardController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
-      const performedBy = (req.body?.performedBy || req.query.performedBy) as string | undefined;
+      const performedBy = (req.body?.performedBy || req.query.performedBy || req.user?.name || req.user?.username) as string | undefined;
       const result = await CardService.deleteCard(id, performedBy);
 
       res.status(200).json({
         success: true,
         message: result.message,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async restore(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const performedBy = (req.body?.performedBy || req.query.performedBy || req.user?.name || req.user?.username) as string | undefined;
+      const card = await CardService.restoreCard(id, performedBy);
+
+      res.status(200).json({
+        success: true,
+        data: card,
       });
     } catch (error) {
       next(error);

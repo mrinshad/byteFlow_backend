@@ -5,10 +5,12 @@ export class CommentController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const { cardId, comment, createdBy } = req.body || {};
+      const author = createdBy || req.user?.name || req.user?.username;
+
       const newComment = await CommentService.createComment({
         cardId,
         comment,
-        createdBy,
+        createdBy: author,
       });
 
       res.status(201).json({
@@ -38,10 +40,11 @@ export class CommentController {
     try {
       const id = req.params.id as string;
       const { comment, performedBy } = req.body || {};
+      const author = performedBy || req.user?.name || req.user?.username;
 
       const updated = await CommentService.updateComment(id, {
         comment,
-        performedBy,
+        performedBy: author,
       });
 
       res.status(200).json({
@@ -56,7 +59,7 @@ export class CommentController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
-      const performedBy = (req.body?.performedBy || req.query.performedBy) as string | undefined;
+      const performedBy = (req.body?.performedBy || req.query.performedBy || req.user?.name || req.user?.username) as string | undefined;
       const result = await CommentService.deleteComment(id, performedBy);
 
       res.status(200).json({

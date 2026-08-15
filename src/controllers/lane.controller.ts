@@ -5,11 +5,13 @@ export class LaneController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const { projectId, name, color, createdBy } = req.body || {};
+      const author = createdBy || req.user?.name || req.user?.username;
+
       const lane = await LaneService.createLane({
         projectId,
         name,
         color,
-        createdBy,
+        createdBy: author,
       });
 
       res.status(201).json({
@@ -53,10 +55,12 @@ export class LaneController {
     try {
       const id = req.params.id as string;
       const { name, color, performedBy } = req.body || {};
+      const author = performedBy || req.user?.name || req.user?.username;
+
       const lane = await LaneService.updateLane(id, {
         name,
         color,
-        performedBy,
+        performedBy: author,
       });
 
       res.status(200).json({
@@ -71,11 +75,13 @@ export class LaneController {
   static async reorder(req: Request, res: Response, next: NextFunction) {
     try {
       const { projectId, items, performedBy } = req.body || {};
+      const author = performedBy || req.user?.name || req.user?.username;
+
       if (!projectId) {
         throw { statusCode: 400, message: 'Project ID is required for reordering' };
       }
 
-      const lanes = await LaneService.reorderLanes(projectId, items, performedBy);
+      const lanes = await LaneService.reorderLanes(projectId, items, author);
 
       res.status(200).json({
         success: true,
@@ -89,7 +95,7 @@ export class LaneController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
-      const performedBy = (req.body?.performedBy || req.query.performedBy) as string | undefined;
+      const performedBy = (req.body?.performedBy || req.query.performedBy || req.user?.name || req.user?.username) as string | undefined;
       const result = await LaneService.deleteLane(id, performedBy);
 
       res.status(200).json({

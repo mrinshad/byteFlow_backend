@@ -43,6 +43,7 @@ export interface CardFilterQuery {
   fromDate?: Date | string;
   toDate?: Date | string;
   search?: string;
+  includeDeleted?: boolean;
 }
 
 export class CardService {
@@ -130,8 +131,11 @@ export class CardService {
   static async getCardsByProject(projectId: string, filters?: CardFilterQuery) {
     const where: any = {
       projectId,
-      deletedAt: null,
     };
+
+    if (!filters?.includeDeleted) {
+      where.deletedAt = null;
+    }
 
     if (filters?.laneId) {
       where.laneId = filters.laneId;
@@ -498,5 +502,54 @@ export class CardService {
 
     emitToProject(existing.projectId, 'card:deleted', { id });
     return { success: true, message: 'Card deleted successfully' };
+  }
+
+  static async restoreCard(id: string, performedBy?: string) {
+    const existing = await prisma.card.findFirst({
+      where: { id, deletedAt: { not: null } },
+    });
+
+    if (!existing) {
+      throw { statusCode: 404, message: 'Deleted card not found' };
+    }
+
+    const restored = await prisma.$transaction(async (tx) => {
+      const card = await tx.card.update({
+        where: { id },
+        data: {
+          deletedAt: null,
+          deletedBy: null,
+        },
+        include: {
+          lane: {
+            select: { id: true, name: true, color: true },
+          },
+          tags: {
+            include: { tag: true },
+          },
+          _count: {
+            select: { comments: { where: { deletedAt: null } }, tags: true },
+          },
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          projectId: existing.projectId,
+          laneId: existing.laneId,
+          cardId: id,
+          performedBy: performedBy || null,
+          action: ActivityAction.RESTORE_CARD,
+          newValue: {
+            title: existing.title,
+          },
+        },
+      });
+
+      return card;
+    });
+
+    emitToProject(existing.projectId, 'card:created', restored);
+    return restored;
   }
 }

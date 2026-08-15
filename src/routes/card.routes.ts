@@ -10,5 +10,6 @@ router.get('/:id', CardController.getById);
 router.patch('/:id', CardController.update);
 router.put('/:id/move', CardController.move);
 router.delete('/:id', CardController.delete);
+router.post('/:id/restore', CardController.restore);
 
 export default router;

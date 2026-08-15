@@ -156,4 +156,35 @@ export class AuthService {
 
     return user;
   }
+
+  static async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (!currentPassword) {
+      throw { statusCode: 400, message: 'Current password is required' };
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw { statusCode: 400, message: 'New password must be at least 6 characters' };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw { statusCode: 404, message: 'User not found' };
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      throw { statusCode: 400, message: 'Incorrect current password' };
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { success: true, message: 'Password changed successfully' };
+  }
 }

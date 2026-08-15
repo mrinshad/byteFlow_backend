@@ -31,4 +31,15 @@ export class AuthController {
       next(error);
     }
   }
+
+  static async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user!.id;
+      const { currentPassword, newPassword } = req.body;
+      const result = await AuthService.changePassword(userId, currentPassword, newPassword);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -13,5 +13,6 @@ router.get('/projects', AdminController.getProjects);
 router.put('/projects/:id/members', AdminController.updateProjectMembers);
 router.get('/users', AdminController.getUsers);
 router.patch('/users/:id/role', AdminController.updateUserRole);
+router.post('/users/:id/reset-password', AdminController.resetPassword);
 
 export default router;

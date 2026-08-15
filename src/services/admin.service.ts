@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { prisma } from '../prisma.js';
 
@@ -250,5 +251,28 @@ export class AdminService {
     });
 
     return updated;
+  }
+
+  static async resetUserPassword(userId: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 6) {
+      throw { statusCode: 400, message: 'Password must be at least 6 characters' };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw { statusCode: 404, message: 'User not found' };
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { success: true, message: `Password reset successfully for @${user.username}` };
   }
 }

@@ -68,4 +68,24 @@ export class AdminController {
       next(error);
     }
   }
+
+  static async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const { password } = req.body;
+
+      if (!password) {
+        res.status(400).json({
+          success: false,
+          error: { message: 'New password is required' },
+        });
+        return;
+      }
+
+      const result = await AdminService.resetUserPassword(id, password);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

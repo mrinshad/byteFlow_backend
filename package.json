@@ -16,7 +16,8 @@
     "test": "node scripts/run-all-tests.js",
     "test:stress": "node scripts/run-all-tests.js",
     "test:suite": "node scripts/run-all-tests.js",
-    "test:ui": "node scripts/test-browser-ui.js"
+    "test:ui": "node scripts/test-browser-ui.js",
+    "test:ui:live": "node scripts/test-browser-ui-live.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

@@ -33,7 +33,9 @@ export class AdminController {
         return;
       }
 
-      const members = await AdminService.updateProjectMembers(id, userIds);
+      const assignerName = req.user?.name || req.user?.username;
+      const assignerId = req.user?.id;
+      const members = await AdminService.updateProjectMembers(id, userIds, assignerName, assignerId);
       res.json({ success: true, data: members });
     } catch (error) {
       next(error);

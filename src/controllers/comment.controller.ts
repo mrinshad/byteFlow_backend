@@ -5,12 +5,15 @@ export class CommentController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const { cardId, comment, createdBy } = req.body || {};
-      const author = createdBy || req.user?.name || req.user?.username;
+      const senderId = req.user?.id;
+      const author = createdBy || req.user?.name || req.user?.username || 'A team member';
 
       const newComment = await CommentService.createComment({
         cardId,
         comment,
         createdBy: author,
+        senderId,
+        creatorName: author,
       });
 
       res.status(201).json({

@@ -8,6 +8,7 @@ export class CardController {
         req.body || {};
 
       const author = createdBy || req.user?.name || req.user?.username;
+      const senderId = req.user?.id;
 
       const card = await CardService.createCard({
         projectId,
@@ -18,6 +19,7 @@ export class CardController {
         dueDate,
         assigneeId,
         createdBy: author,
+        senderId,
       });
 
       res.status(201).json({
@@ -75,6 +77,7 @@ export class CardController {
       const id = req.params.id as string;
       const { title, description, priority, dueDate, assigneeId, performedBy } = req.body || {};
       const userPerformer = performedBy || req.user?.name || req.user?.username;
+      const senderId = req.user?.id;
 
       const card = await CardService.updateCard(id, {
         title,
@@ -83,6 +86,7 @@ export class CardController {
         dueDate,
         assigneeId,
         performedBy: userPerformer,
+        senderId,
       });
 
       res.status(200).json({
@@ -99,6 +103,7 @@ export class CardController {
       const id = req.params.id as string;
       const { targetLaneId, position, performedBy } = req.body || {};
       const userPerformer = performedBy || req.user?.name || req.user?.username;
+      const senderId = req.user?.id;
 
       if (!targetLaneId || position === undefined) {
         throw { statusCode: 400, message: 'targetLaneId and position are required' };
@@ -108,6 +113,7 @@ export class CardController {
         targetLaneId,
         position: Number(position),
         performedBy: userPerformer,
+        senderId,
       });
 
       res.status(200).json({

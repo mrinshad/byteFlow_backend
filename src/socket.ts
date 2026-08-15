@@ -12,6 +12,7 @@ export function initSocket(httpServer: HTTPServer) {
   });
 
   io.on('connection', (socket) => {
+    // Project room events
     socket.on('join:project', (projectId: string) => {
       if (projectId) {
         socket.join(`project:${projectId}`);
@@ -21,6 +22,19 @@ export function initSocket(httpServer: HTTPServer) {
     socket.on('leave:project', (projectId: string) => {
       if (projectId) {
         socket.leave(`project:${projectId}`);
+      }
+    });
+
+    // User room events for personal real-time notifications
+    socket.on('join:user', (userId: string) => {
+      if (userId) {
+        socket.join(`user:${userId}`);
+      }
+    });
+
+    socket.on('leave:user', (userId: string) => {
+      if (userId) {
+        socket.leave(`user:${userId}`);
       }
     });
   });
@@ -35,5 +49,11 @@ export function getIO(): SocketIOServer | null {
 export function emitToProject(projectId: string, event: string, data?: any) {
   if (io && projectId) {
     io.to(`project:${projectId}`).emit(event, data);
+  }
+}
+
+export function emitToUser(userId: string, event: string, data?: any) {
+  if (io && userId) {
+    io.to(`user:${userId}`).emit(event, data);
   }
 }

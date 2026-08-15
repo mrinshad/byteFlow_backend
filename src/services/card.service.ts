@@ -1,6 +1,7 @@
 import { prisma } from '../prisma.js';
-import { ActivityAction, Priority } from '@prisma/client';
+import { ActivityAction, Priority, NotificationType } from '@prisma/client';
 import { emitToProject } from '../socket.js';
+import { NotificationService } from './notification.service.js';
 
 export interface CreateCardInput {
   projectId: string;
@@ -11,6 +12,7 @@ export interface CreateCardInput {
   dueDate?: Date | string | null;
   assigneeId?: string | null;
   createdBy?: string;
+  senderId?: string;
 }
 
 export interface UpdateCardInput {
@@ -20,12 +22,14 @@ export interface UpdateCardInput {
   dueDate?: Date | string | null;
   assigneeId?: string | null;
   performedBy?: string;
+  senderId?: string;
 }
 
 export interface MoveCardInput {
   targetLaneId: string;
   position: number;
   performedBy?: string;
+  senderId?: string;
 }
 
 export interface ReorderCardItem {
@@ -123,6 +127,20 @@ export class CardService {
 
       return created;
     });
+
+    // Notify assigned user if specified
+    if (input.assigneeId && input.assigneeId !== input.senderId) {
+      await NotificationService.createNotification({
+        userId: input.assigneeId,
+        senderId: input.senderId,
+        senderName: input.createdBy || 'A team member',
+        type: NotificationType.ASSIGNED_TO_CARD,
+        title: `Assigned to task "${card.title}"`,
+        message: `${input.createdBy || 'A team member'} assigned you to task "${card.title}".`,
+        projectId: card.projectId,
+        cardId: card.id,
+      });
+    }
 
     emitToProject(input.projectId, 'card:created', card);
     return card;
@@ -361,6 +379,24 @@ export class CardService {
       return result;
     });
 
+    // Notify if a new assignee was assigned
+    if (
+      input.assigneeId &&
+      input.assigneeId !== existing.assigneeId &&
+      input.assigneeId !== input.senderId
+    ) {
+      await NotificationService.createNotification({
+        userId: input.assigneeId,
+        senderId: input.senderId,
+        senderName: input.performedBy || 'A team member',
+        type: NotificationType.ASSIGNED_TO_CARD,
+        title: `Assigned to task "${updated.title}"`,
+        message: `${input.performedBy || 'A team member'} assigned you to task "${updated.title}".`,
+        projectId: updated.projectId,
+        cardId: updated.id,
+      });
+    }
+
     emitToProject(existing.projectId, 'card:updated', updated);
     return updated;
   }
@@ -420,6 +456,24 @@ export class CardService {
 
       return result;
     });
+
+    // Notify assignee if card moved to a different lane
+    if (
+      existing.laneId !== input.targetLaneId &&
+      existing.assigneeId &&
+      existing.assigneeId !== input.senderId
+    ) {
+      await NotificationService.createNotification({
+        userId: existing.assigneeId,
+        senderId: input.senderId,
+        senderName: input.performedBy || 'A team member',
+        type: NotificationType.CARD_UPDATED,
+        title: `Task moved to "${targetLane.name}"`,
+        message: `"${existing.title}" was moved to "${targetLane.name}" by ${input.performedBy || 'a team member'}.`,
+        projectId: existing.projectId,
+        cardId: existing.id,
+      });
+    }
 
     emitToProject(existing.projectId, 'card:moved', updated);
     return updated;

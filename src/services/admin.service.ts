@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { prisma } from '../prisma.js';
+import { NotificationService } from './notification.service.js';
 
 export class AdminService {
   static async getStats() {
@@ -135,14 +136,22 @@ export class AdminService {
     });
   }
 
-  static async updateProjectMembers(projectId: string, userIds: string[]) {
+  static async updateProjectMembers(
+    projectId: string,
+    userIds: string[],
+    assignerName?: string,
+    assignerId?: string
+  ) {
     const project = await prisma.project.findFirst({
       where: { id: projectId, deletedAt: null },
+      include: { members: { select: { userId: true } } },
     });
 
     if (!project) {
       throw { statusCode: 404, message: 'Project not found' };
     }
+
+    const previousMemberIds = new Set(project.members.map((m) => m.userId));
 
     // Verify all userIds exist
     const uniqueUserIds = Array.from(new Set(userIds));
@@ -156,7 +165,7 @@ export class AdminService {
       }
     }
 
-    return await prisma.$transaction(async (tx) => {
+    const updatedMembers = await prisma.$transaction(async (tx) => {
       // Remove current members
       await tx.projectMember.deleteMany({
         where: { projectId },
@@ -187,6 +196,23 @@ export class AdminService {
         },
       });
     });
+
+    // Notify newly assigned members
+    const newlyAddedUserIds = uniqueUserIds.filter((id) => !previousMemberIds.has(id));
+    for (const userId of newlyAddedUserIds) {
+      if (assignerId && userId === assignerId) continue;
+      await NotificationService.createNotification({
+        userId,
+        senderId: assignerId,
+        senderName: assignerName || 'Administrator',
+        type: 'ASSIGNED_TO_PROJECT' as any,
+        title: `Added to project "${project.name}"`,
+        message: `${assignerName || 'An administrator'} added you as a member of "${project.name}".`,
+        projectId: project.id,
+      });
+    }
+
+    return updatedMembers;
   }
 
   static async getUsers() {

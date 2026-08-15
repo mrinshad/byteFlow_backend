@@ -23,6 +23,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   projectMembers ProjectMember[]
+  notifications  Notification[]
 
   @@index([username])
   @@index([role])
@@ -237,3 +238,33 @@ model ActivityLog {
   @@index([projectId, createdAt])
   @@index([cardId])
 }
+
+enum NotificationType {
+  MENTION
+  ASSIGNED_TO_PROJECT
+  ASSIGNED_TO_CARD
+  CARD_COMMENT
+  CARD_UPDATED
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  userId     String
+  senderId   String?
+  senderName String?
+  type       NotificationType
+  title      String
+  message    String
+  projectId  String?
+  cardId     String?
+  commentId  String?
+  isRead     Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, type])
+  @@index([userId, createdAt])
+}
+

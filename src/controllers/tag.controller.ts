@@ -5,11 +5,13 @@ export class TagController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const { projectId, name, color, createdBy } = req.body || {};
+      const author = createdBy || req.user?.name || req.user?.username;
+
       const tag = await TagService.createTag({
         projectId,
         name,
         color,
-        createdBy,
+        createdBy: author,
       });
 
       res.status(201).json({
@@ -39,11 +41,12 @@ export class TagController {
     try {
       const id = req.params.id as string;
       const { name, color, performedBy } = req.body || {};
+      const author = performedBy || req.user?.name || req.user?.username;
 
       const updated = await TagService.updateTag(id, {
         name,
         color,
-        performedBy,
+        performedBy: author,
       });
 
       res.status(200).json({
@@ -58,7 +61,7 @@ export class TagController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
-      const performedBy = (req.body?.performedBy || req.query.performedBy) as string | undefined;
+      const performedBy = (req.body?.performedBy || req.query.performedBy || req.user?.name || req.user?.username) as string | undefined;
       const result = await TagService.deleteTag(id, performedBy);
 
       res.status(200).json({
@@ -74,12 +77,13 @@ export class TagController {
     try {
       const cardId = req.params.cardId as string;
       const { tagId, performedBy } = req.body || {};
+      const author = performedBy || req.user?.name || req.user?.username;
 
       if (!tagId) {
         throw { statusCode: 400, message: 'tagId is required' };
       }
 
-      const cardTag = await TagService.assignTagToCard(cardId, tagId, performedBy);
+      const cardTag = await TagService.assignTagToCard(cardId, tagId, author);
 
       res.status(200).json({
         success: true,
@@ -94,7 +98,7 @@ export class TagController {
     try {
       const cardId = req.params.cardId as string;
       const tagId = req.params.tagId as string;
-      const performedBy = (req.body?.performedBy || req.query.performedBy) as string | undefined;
+      const performedBy = (req.body?.performedBy || req.query.performedBy || req.user?.name || req.user?.username) as string | undefined;
 
       const result = await TagService.removeTagFromCard(cardId, tagId, performedBy);
 

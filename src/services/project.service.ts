@@ -5,6 +5,7 @@ export interface CreateProjectInput {
   name: string;
   description?: string;
   createdBy?: string;
+  creatorName?: string;
   userRole?: Role;
 }
 
@@ -12,6 +13,7 @@ export interface UpdateProjectInput {
   name?: string;
   description?: string;
   performedBy?: string;
+  performerName?: string;
   userRole?: Role;
 }
 
@@ -59,7 +61,7 @@ export class ProjectService {
       await tx.activityLog.create({
         data: {
           projectId: project.id,
-          performedBy: input.createdBy || null,
+          performedBy: input.creatorName || input.createdBy || null,
           action: ActivityAction.CREATE_PROJECT,
           newValue: {
             name: project.name,
@@ -82,7 +84,7 @@ export class ProjectService {
             name: lane.name,
             color: lane.color,
             position: lane.position,
-            createdBy: input.createdBy || null,
+            createdBy: input.creatorName || input.createdBy || null,
           },
         });
 
@@ -90,7 +92,7 @@ export class ProjectService {
           data: {
             projectId: project.id,
             laneId: created.id,
-            performedBy: input.createdBy || null,
+            performedBy: input.creatorName || input.createdBy || null,
             action: ActivityAction.CREATE_LANE,
             newValue: {
               name: created.name,

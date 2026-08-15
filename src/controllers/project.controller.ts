@@ -6,12 +6,14 @@ export class ProjectController {
     try {
       const { name, description } = req.body || {};
       const createdBy = req.user?.id;
+      const creatorName = req.user?.name || req.user?.username;
       const userRole = req.user?.role;
 
       const project = await ProjectService.createProject({
         name,
         description,
         createdBy,
+        creatorName,
         userRole,
       });
 
@@ -72,12 +74,14 @@ export class ProjectController {
       const id = req.params.id as string;
       const { name, description } = req.body || {};
       const performedBy = req.user?.id;
+      const performerName = req.user?.name || req.user?.username;
       const userRole = req.user?.role;
 
       const updated = await ProjectService.updateProject(id, {
         name,
         description,
         performedBy,
+        performerName,
         userRole,
       });
 
@@ -93,7 +97,7 @@ export class ProjectController {
   static async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
-      const performedBy = req.user?.id;
+      const performedBy = req.user?.name || req.user?.username || req.user?.id;
       const userRole = req.user?.role;
 
       const result = await ProjectService.deleteProject(id, performedBy, userRole);

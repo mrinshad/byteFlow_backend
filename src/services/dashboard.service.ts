@@ -97,8 +97,8 @@ export class DashboardService {
   static async getGlobalStats() {
     const [totalProjects, totalCards, totalLanes] = await Promise.all([
       prisma.project.count({ where: { deletedAt: null } }),
-      prisma.card.count({ where: { deletedAt: null } }),
-      prisma.lane.count({ where: { deletedAt: null } }),
+      prisma.card.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
+      prisma.lane.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
     ]);
 
     return {

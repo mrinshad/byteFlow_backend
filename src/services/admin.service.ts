@@ -8,8 +8,8 @@ export class AdminService {
     const [totalProjects, totalUsers, totalCards, totalLanes, usersByRole, allProjects] = await Promise.all([
       prisma.project.count({ where: { deletedAt: null } }),
       prisma.user.count(),
-      prisma.card.count({ where: { deletedAt: null } }),
-      prisma.lane.count({ where: { deletedAt: null } }),
+      prisma.card.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
+      prisma.lane.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
       prisma.user.groupBy({
         by: ['role'],
         _count: true,
@@ -225,6 +225,9 @@ export class AdminService {
         role: true,
         createdAt: true,
         projectMembers: {
+          where: {
+            project: { deletedAt: null },
+          },
           include: {
             project: {
               select: {

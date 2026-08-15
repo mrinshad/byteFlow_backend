@@ -306,14 +306,43 @@ export class ProjectService {
     }
 
     await prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      // 1. Soft delete the project
       await tx.project.update({
         where: { id },
         data: {
-          deletedAt: new Date(),
+          deletedAt: now,
           deletedBy: performedBy || null,
         },
       });
 
+      // 2. Soft delete all lanes belonging to this project
+      await tx.lane.updateMany({
+        where: { projectId: id, deletedAt: null },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      // 3. Soft delete all cards belonging to this project
+      await tx.card.updateMany({
+        where: { projectId: id, deletedAt: null },
+        data: {
+          deletedAt: now,
+          deletedBy: performedBy || null,
+        },
+      });
+
+      // 4. Soft delete all tags belonging to this project
+      await tx.tag.updateMany({
+        where: { projectId: id, deletedAt: null },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      // 5. Log activity
       await tx.activityLog.create({
         data: {
           projectId: id,

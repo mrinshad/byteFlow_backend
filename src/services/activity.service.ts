@@ -81,4 +81,78 @@ export class ActivityService {
 
     return await this.enrichActivities(activities);
   }
+
+  static async getAllActivities(filters?: {
+    page?: number;
+    limit?: number;
+    projectId?: string;
+    action?: string;
+    userId?: string;
+    from?: string;
+    to?: string;
+  }) {
+    const page = Math.max(1, Number(filters?.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(filters?.limit) || 30));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (filters?.projectId) {
+      where.projectId = filters.projectId;
+    }
+
+    if (filters?.action) {
+      where.action = filters.action;
+    }
+
+    if (filters?.userId) {
+      where.performedBy = filters.userId;
+    }
+
+    if (filters?.from || filters?.to) {
+      const dateFilter: any = {};
+      if (filters.from) dateFilter.gte = new Date(filters.from);
+      if (filters.to) dateFilter.lte = new Date(filters.to);
+      where.createdAt = dateFilter;
+    }
+
+    const [total, activities] = await Promise.all([
+      prisma.activityLog.count({ where }),
+      prisma.activityLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          project: {
+            select: { id: true, name: true },
+          },
+          card: {
+            select: { id: true, title: true },
+          },
+          lane: {
+            select: { id: true, name: true, color: true },
+          },
+          tag: {
+            select: { id: true, name: true, color: true },
+          },
+          comment: {
+            select: { id: true, comment: true },
+          },
+        },
+      }),
+    ]);
+
+    const enriched = await this.enrichActivities(activities);
+
+    return {
+      data: enriched,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 }

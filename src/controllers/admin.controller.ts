@@ -11,10 +11,22 @@ export class AdminController {
     }
   }
 
-  static async getProjects(_req: Request, res: Response, next: NextFunction) {
+  static async getProjects(req: Request, res: Response, next: NextFunction) {
     try {
-      const projects = await AdminService.getProjects();
+      const includeDeleted = req.query.includeDeleted === 'true';
+      const projects = await AdminService.getProjects(includeDeleted);
       res.json({ success: true, data: projects });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async restoreProject(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const performedBy = req.user?.id;
+      const result = await AdminService.restoreProject(id, performedBy);
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -42,10 +54,54 @@ export class AdminController {
     }
   }
 
-  static async getUsers(_req: Request, res: Response, next: NextFunction) {
+  static async getUsers(req: Request, res: Response, next: NextFunction) {
     try {
-      const users = await AdminService.getUsers();
+      const includeDeleted = req.query.includeDeleted === 'true';
+      const users = await AdminService.getUsers(includeDeleted);
       res.json({ success: true, data: users });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async toggleLockUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const { isLocked } = req.body;
+
+      if (typeof isLocked !== 'boolean') {
+        res.status(400).json({
+          success: false,
+          error: { message: 'isLocked must be a boolean' },
+        });
+        return;
+      }
+
+      const performedBy = req.user?.id;
+      const updated = await AdminService.toggleLockUser(id, isLocked, performedBy);
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const performedBy = req.user?.id;
+      const result = await AdminService.deleteUser(id, performedBy);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async restoreUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const performedBy = req.user?.id;
+      const result = await AdminService.restoreUser(id, performedBy);
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -86,6 +142,24 @@ export class AdminController {
 
       const result = await AdminService.resetUserPassword(id, password);
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getActivityLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { page, limit, projectId, action, userId, from, to } = req.query;
+      const result = await AdminService.getActivityLogs({
+        page: page ? Number(page) : undefined,
+        limit: limit ? Number(limit) : undefined,
+        projectId: projectId ? String(projectId) : undefined,
+        action: action ? String(action) : undefined,
+        userId: userId ? String(userId) : undefined,
+        from: from ? String(from) : undefined,
+        to: to ? String(to) : undefined,
+      });
+      res.json({ success: true, ...result });
     } catch (error) {
       next(error);
     }

@@ -1,13 +1,14 @@
 # ByteFlow Backend
 
-Node.js, Express, and TypeScript backend with Prisma ORM (PostgreSQL) for ByteFlow.
+Node.js, Express, and TypeScript backend with Prisma ORM (PostgreSQL) and Socket.IO for ByteFlow.
 
 ## Tech Stack
 - **Runtime**: Node.js (ESM)
 - **Framework**: Express.js
+- **Real-Time**: Socket.IO
 - **Language**: TypeScript
 - **Database & ORM**: PostgreSQL, Prisma 7 (`@prisma/adapter-pg`)
-- **Development Tooling**: `tsx` (fast live reload watcher)
+- **Development Tooling**: `tsx` (live reload watcher)
 
 ## Getting Started
 
@@ -17,32 +18,87 @@ Ensure `.env` contains your PostgreSQL database URL and configuration:
 DATABASE_URL="postgresql://apple@localhost:5432/byteflow?schema=public"
 PORT=5000
 NODE_ENV=development
+JWT_SECRET="byteflow-jwt-secret"
+CORS_ORIGIN="http://localhost:3000"
 ```
 
-### 2. Install Dependencies
+### 2. Install Dependencies & Migrate
 ```bash
 npm install
+npx prisma migrate dev
+npx prisma generate
 ```
 
-### 3. Generate Prisma Client
-```bash
-npm run prisma:generate
-```
-
-### 4. Run in Development Mode
+### 3. Run in Development Mode
 ```bash
 npm run dev
 ```
 The server will start on `http://localhost:5000`.
 
-## Available Scripts
-- `npm run dev`: Start development server with live reload (`tsx watch src/server.ts`).
-- `npm run build`: Compile TypeScript code to `dist/`.
-- `npm run start`: Run production build.
-- `npm run prisma:generate`: Generate Prisma Client.
-- `npm run prisma:migrate`: Run Prisma migrations.
-- `npm run prisma:studio`: Open Prisma Studio database GUI.
-
 ## API Endpoints
-- `GET /`: API overview and status
-- `GET /api/health`: Server health check, uptime, and database connectivity status
+
+### System & Health
+- `GET /api/health` - Server health and database connectivity status
+
+### Authentication & Profile (`/api/auth`)
+- `POST /api/auth/register` - Public member registration (10 user limit)
+- `POST /api/auth/login` - User authentication (checks active and unlocked status)
+- `GET /api/auth/me` - Current user profile
+- `PATCH /api/auth/change-password` - Update current user password
+
+### Projects (`/api/projects`)
+- `GET /api/projects` - List active projects for current user
+- `POST /api/projects` - Create a project
+- `GET /api/projects/:id` - Get project details
+- `PATCH /api/projects/:id` - Update project details
+- `DELETE /api/projects/:id` - Soft delete project and cascade to lanes, cards, tags
+
+### Lanes (`/api/lanes`)
+- `GET /api/lanes/project/:projectId` - Get lanes for a project
+- `POST /api/lanes` - Create a lane
+- `PATCH /api/lanes/:id` - Update lane name/color
+- `PATCH /api/lanes/reorder` - Reorder lanes
+- `DELETE /api/lanes/:id` - Soft delete a lane
+
+### Cards (`/api/cards`)
+- `GET /api/cards/project/:projectId` - Get cards for a project (supports filtering & search)
+- `POST /api/cards` - Create a card
+- `GET /api/cards/:id` - Get card details
+- `PATCH /api/cards/:id` - Update card details
+- `PATCH /api/cards/:id/move` - Move card across lanes / reorder
+- `DELETE /api/cards/:id` - Soft delete a card
+- `POST /api/cards/:id/restore` - Restore a deleted card
+
+### Comments & Mentions (`/api/comments`)
+- `GET /api/comments/card/:cardId` - Get comments for a card
+- `POST /api/comments` - Create comment (supports `@mention` alerts)
+- `PATCH /api/comments/:id` - Update comment
+- `DELETE /api/comments/:id` - Soft delete comment
+
+### Tags (`/api/tags`)
+- `GET /api/tags/project/:projectId` - List tags for a project
+- `POST /api/tags` - Create a tag
+- `POST /api/tags/card/:cardId/assign` - Assign tag to card
+- `DELETE /api/tags/card/:cardId/tag/:tagId` - Remove tag from card
+
+### Dashboard & Metrics (`/api/dashboard`)
+- `GET /api/dashboard/global` - Workspace summary metrics
+- `GET /api/dashboard/project/:projectId` - Project progress, overdue, completion rate
+
+### Notifications (`/api/notifications`)
+- `GET /api/notifications` - Paginated notifications
+- `PATCH /api/notifications/:id/read` - Mark single notification read
+- `PATCH /api/notifications/read-all` - Mark all notifications read
+
+### Admin Portal (`/api/admin`) - Requires `ADMIN` Role
+- `GET /api/admin/stats` - Comprehensive system analytics
+- `GET /api/admin/projects?includeDeleted=true` - All projects with optional deleted filter
+- `POST /api/admin/projects/:id/restore` - Restore soft-deleted project and all underlying data
+- `PUT /api/admin/projects/:id/members` - Update team allocations
+- `GET /api/admin/users?includeDeleted=true` - User directory with status & allocated projects
+- `PATCH /api/admin/users/:id/role` - Update user role
+- `PATCH /api/admin/users/:id/lock` - Lock / unlock user account
+- `DELETE /api/admin/users/:id` - Deactivate user account
+- `POST /api/admin/users/:id/restore` - Restore deactivated user account
+- `POST /api/admin/users/:id/reset-password` - Admin password reset
+- `GET /api/admin/activities` - Workspace-wide audit logs with filters and pagination

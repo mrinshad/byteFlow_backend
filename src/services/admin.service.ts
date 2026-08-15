@@ -1,17 +1,19 @@
 import bcrypt from 'bcryptjs';
-import { Role } from '@prisma/client';
+import { Role, ActivityAction } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { NotificationService } from './notification.service.js';
+import { ActivityService } from './activity.service.js';
 
 export class AdminService {
   static async getStats() {
     const [totalProjects, totalUsers, totalCards, totalLanes, usersByRole, allProjects] = await Promise.all([
       prisma.project.count({ where: { deletedAt: null } }),
-      prisma.user.count(),
+      prisma.user.count({ where: { deletedAt: null } }),
       prisma.card.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
       prisma.lane.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
       prisma.user.groupBy({
         by: ['role'],
+        where: { deletedAt: null },
         _count: true,
       }),
       prisma.project.findMany({
@@ -71,16 +73,20 @@ export class AdminService {
     };
   }
 
-  static async getProjects() {
+  static async getProjects(includeDeleted = false) {
+    const where: any = {};
+    if (!includeDeleted) {
+      where.deletedAt = null;
+    }
+
     const projects = await prisma.project.findMany({
-      where: { deletedAt: null },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         lanes: {
-          where: { deletedAt: null },
           include: {
             _count: {
-              select: { cards: { where: { deletedAt: null } } },
+              select: { cards: true },
             },
           },
         },
@@ -98,8 +104,8 @@ export class AdminService {
         },
         _count: {
           select: {
-            lanes: { where: { deletedAt: null } },
-            cards: { where: { deletedAt: null } },
+            lanes: true,
+            cards: true,
             members: true,
           },
         },
@@ -121,6 +127,9 @@ export class AdminService {
         createdBy: p.createdBy,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
+        deletedAt: p.deletedAt,
+        deletedBy: p.deletedBy,
+        isDeleted: !!p.deletedAt,
         totalLanes: p._count.lanes,
         totalCards,
         completedCards,
@@ -134,6 +143,72 @@ export class AdminService {
         })),
       };
     });
+  }
+
+  static async restoreProject(id: string, performedBy?: string) {
+    const existing = await prisma.project.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      throw { statusCode: 404, message: 'Project not found' };
+    }
+
+    if (!existing.deletedAt) {
+      return { success: true, message: 'Project is already active' };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Restore the project
+      await tx.project.update({
+        where: { id },
+        data: {
+          deletedAt: null,
+          deletedBy: null,
+        },
+      });
+
+      // 2. Restore underlying lanes
+      await tx.lane.updateMany({
+        where: { projectId: id },
+        data: {
+          deletedAt: null,
+          deletedBy: null,
+        },
+      });
+
+      // 3. Restore underlying cards
+      await tx.card.updateMany({
+        where: { projectId: id },
+        data: {
+          deletedAt: null,
+          deletedBy: null,
+        },
+      });
+
+      // 4. Restore underlying tags
+      await tx.tag.updateMany({
+        where: { projectId: id },
+        data: {
+          deletedAt: null,
+          deletedBy: null,
+        },
+      });
+
+      // 5. Activity log
+      await tx.activityLog.create({
+        data: {
+          projectId: id,
+          performedBy: performedBy || null,
+          action: ActivityAction.RESTORE_PROJECT,
+          newValue: {
+            name: existing.name,
+          },
+        },
+      });
+    });
+
+    return { success: true, message: 'Project and underlying data restored successfully' };
   }
 
   static async updateProjectMembers(
@@ -157,11 +232,11 @@ export class AdminService {
     const uniqueUserIds = Array.from(new Set(userIds));
     if (uniqueUserIds.length > 0) {
       const existingUsers = await prisma.user.findMany({
-        where: { id: { in: uniqueUserIds } },
+        where: { id: { in: uniqueUserIds }, deletedAt: null },
         select: { id: true },
       });
       if (existingUsers.length !== uniqueUserIds.length) {
-        throw { statusCode: 400, message: 'One or more selected users do not exist' };
+        throw { statusCode: 400, message: 'One or more selected users do not exist or are deactivated' };
       }
     }
 
@@ -215,14 +290,23 @@ export class AdminService {
     return updatedMembers;
   }
 
-  static async getUsers() {
+  static async getUsers(includeDeleted = false) {
+    const where: any = {};
+    if (!includeDeleted) {
+      where.deletedAt = null;
+    }
+
     const users = await prisma.user.findMany({
+      where,
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
         name: true,
         username: true,
         role: true,
+        isLocked: true,
+        deletedAt: true,
+        deletedBy: true,
         createdAt: true,
         projectMembers: {
           where: {
@@ -245,12 +329,101 @@ export class AdminService {
       name: u.name,
       username: u.username,
       role: u.role,
+      isLocked: u.isLocked,
+      isDeleted: !!u.deletedAt,
+      deletedAt: u.deletedAt,
+      deletedBy: u.deletedBy,
       createdAt: u.createdAt,
       assignedProjects: u.projectMembers.map((pm) => ({
         id: pm.project.id,
         name: pm.project.name,
       })),
     }));
+  }
+
+  static async toggleLockUser(userId: string, isLocked: boolean, performedBy?: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw { statusCode: 404, message: 'User not found' };
+    }
+
+    if (user.role === Role.ADMIN && isLocked) {
+      // Prevent locking the primary admin account
+      const adminCount = await prisma.user.count({ where: { role: Role.ADMIN, isLocked: false, deletedAt: null } });
+      if (adminCount <= 1) {
+        throw { statusCode: 400, message: 'Cannot lock the only active administrator account' };
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { isLocked },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        isLocked: true,
+        updatedAt: true,
+      },
+    });
+
+    return updated;
+  }
+
+  static async deleteUser(userId: string, performedBy?: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw { statusCode: 404, message: 'User not found' };
+    }
+
+    if (user.role === Role.ADMIN) {
+      const activeAdminCount = await prisma.user.count({ where: { role: Role.ADMIN, deletedAt: null } });
+      if (activeAdminCount <= 1) {
+        throw { statusCode: 400, message: 'Cannot deactivate the only administrator account' };
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: new Date(),
+        deletedBy: performedBy || null,
+      },
+      select: {
+        id: true,
+        username: true,
+        deletedAt: true,
+      },
+    });
+
+    return { success: true, message: `User @${user.username} deactivated successfully` };
+  }
+
+  static async restoreUser(userId: string, performedBy?: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw { statusCode: 404, message: 'User not found' };
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: null,
+        deletedBy: null,
+      },
+    });
+
+    return { success: true, message: `User @${user.username} restored successfully` };
   }
 
   static async updateUserRole(userId: string, role: Role) {
@@ -303,5 +476,17 @@ export class AdminService {
     });
 
     return { success: true, message: `Password reset successfully for @${user.username}` };
+  }
+
+  static async getActivityLogs(filters?: {
+    page?: number;
+    limit?: number;
+    projectId?: string;
+    action?: string;
+    userId?: string;
+    from?: string;
+    to?: string;
+  }) {
+    return await ActivityService.getAllActivities(filters);
   }
 }

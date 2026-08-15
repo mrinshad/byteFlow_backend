@@ -112,6 +112,14 @@ export class AuthService {
       throw { statusCode: 401, message: 'Invalid username or password' };
     }
 
+    if (user.deletedAt) {
+      throw { statusCode: 403, message: 'Your account has been deactivated. Please contact support.' };
+    }
+
+    if (user.isLocked) {
+      throw { statusCode: 403, message: 'Your account has been locked by an administrator. Please contact support.' };
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -131,6 +139,7 @@ export class AuthService {
         name: user.name,
         username: user.username,
         role: user.role,
+        isLocked: user.isLocked,
         createdAt: user.createdAt,
       },
       token,
@@ -145,13 +154,19 @@ export class AuthService {
         name: true,
         username: true,
         role: true,
+        isLocked: true,
+        deletedAt: true,
         createdAt: true,
         updatedAt: true,
       },
     });
 
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw { statusCode: 404, message: 'User not found' };
+    }
+
+    if (user.isLocked) {
+      throw { statusCode: 403, message: 'Your account has been locked by an administrator. Please contact support.' };
     }
 
     return user;

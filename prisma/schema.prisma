@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ActivityAction {
+  CREATE_PROJECT
+  UPDATE_PROJECT
+  DELETE_PROJECT
+
+  CREATE_LANE
+  UPDATE_LANE
+  DELETE_LANE
+
+  CREATE_CARD
+  UPDATE_CARD
+  MOVE_CARD
+  DELETE_CARD
+  RESTORE_CARD
+
+  ASSIGN_USER
+  UNASSIGN_USER
+
+  CHANGE_PRIORITY
+  CHANGE_DUE_DATE
+
+  CREATE_COMMENT
+  UPDATE_COMMENT
+  DELETE_COMMENT
+
+  CREATE_TAG
+  UPDATE_TAG
+  DELETE_TAG
+
+  ADD_TAG_TO_CARD
+  REMOVE_TAG_FROM_CARD
+}
+
+model Project {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  deletedAt   DateTime?
+  deletedBy   String?
+
+  lanes        Lane[]
+  cards        Card[]
+  tags         Tag[]
+  activityLogs ActivityLog[]
+
+  @@index([deletedAt])
+  @@index([createdAt])
+}
+
+model Lane {
+  id        String    @id @default(uuid())
+  projectId String
+
+  name      String
+  color     String?
+  position  Float
+
+  createdBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  deletedAt DateTime?
+  deletedBy String?
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  cards        Card[]
+  activityLogs ActivityLog[]
+
+  @@index([projectId, deletedAt])
+  @@index([position])
+}
+
+model Card {
+  id          String    @id @default(uuid())
+  projectId   String
+  laneId      String
+
+  title       String
+  description String?
+
+  priority    Priority  @default(MEDIUM)
+  dueDate     DateTime?
+  position    Float
+
+  assigneeId  String?
+
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  deletedAt   DateTime?
+  deletedBy   String?
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lane         Lane          @relation(fields: [laneId], references: [id], onDelete: Cascade)
+  comments     Comment[]
+  tags         CardTag[]
+  activityLogs ActivityLog[]
+
+  @@index([projectId, laneId, deletedAt])
+  @@index([position])
+}
+
+model Tag {
+  id        String    @id @default(uuid())
+  projectId String
+
+  name      String
+  color     String?
+
+  createdBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  deletedAt DateTime?
+  deletedBy String?
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  cards        CardTag[]
+  activityLogs ActivityLog[]
+
+  @@index([projectId, deletedAt])
+}
+
+model CardTag {
+  cardId String
+  tagId  String
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, tagId])
+  @@index([cardId])
+  @@index([tagId])
+}
+
+model Comment {
+  id        String    @id @default(uuid())
+  cardId    String
+
+  comment   String
+
+  createdBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  deletedAt DateTime?
+  deletedBy String?
+
+  card         Card          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  activityLogs ActivityLog[]
+
+  @@index([cardId, deletedAt])
+}
+
+model ActivityLog {
+  id          String         @id @default(uuid())
+
+  projectId   String
+  cardId      String?
+  laneId      String?
+  commentId   String?
+  tagId       String?
+
+  performedBy String?
+
+  action      ActivityAction
+
+  oldValue    Json?
+  newValue    Json?
+
+  createdAt   DateTime       @default(now())
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  card        Card?          @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  lane        Lane?          @relation(fields: [laneId], references: [id], onDelete: SetNull)
+  comment     Comment?       @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  tag         Tag?           @relation(fields: [tagId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([cardId])
+}

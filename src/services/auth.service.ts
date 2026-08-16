@@ -51,7 +51,10 @@ export class AuthService {
     // Enforce 10-user limit only when creating a new active user
     const userCount = await prisma.user.count({ where: { deletedAt: null } });
     if (userCount >= 10) {
-      throw { statusCode: 400, message: 'User limit reached. Maximum 10 users allowed.' };
+      throw {
+        statusCode: 400,
+        message: 'Workspace user limit reached. Please contact us at bytensolution@gmail.com to request access.',
+      };
     }
 
     const existing = await prisma.user.findUnique({
@@ -201,5 +204,18 @@ export class AuthService {
     });
 
     return { success: true, message: 'Password changed successfully' };
+  }
+
+  static async getRegistrationStatus() {
+    const activeUserCount = await prisma.user.count({ where: { deletedAt: null } });
+    const maxUsers = 10;
+    const isRegistrationAllowed = activeUserCount < maxUsers;
+
+    return {
+      isRegistrationAllowed,
+      currentUsers: activeUserCount,
+      maxUsers,
+      supportEmail: 'bytensolution@gmail.com',
+    };
   }
 }

@@ -1,0 +1,2 @@
+-- Enforce at the PostgreSQL database level that only ONE Super Administrator can ever exist in the system
+CREATE UNIQUE INDEX "unique_single_super_admin" ON "User" ("role") WHERE "role" = 'SUPER_ADMIN';

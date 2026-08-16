@@ -42,4 +42,13 @@ export class AuthController {
       next(error);
     }
   }
+
+  static async getRegistrationStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const status = await AuthService.getRegistrationStatus();
+      res.json({ success: true, data: status });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

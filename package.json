@@ -17,7 +17,8 @@
     "test:stress": "node scripts/run-all-tests.js",
     "test:suite": "node scripts/run-all-tests.js",
     "test:ui": "node scripts/test-browser-ui.js",
-    "test:ui:live": "node scripts/test-browser-ui-live.js"
+    "test:ui:live": "node scripts/test-browser-ui-live.js",
+    "seed:superadmin": "node scripts/seed-super-admin.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

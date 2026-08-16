@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 const router = Router();
 
 // Public routes
+router.get('/registration-status', AuthController.getRegistrationStatus);
 router.post('/register', AuthController.register);
 router.post('/login', AuthController.login);
 

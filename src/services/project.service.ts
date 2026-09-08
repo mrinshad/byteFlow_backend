@@ -357,4 +357,114 @@ export class ProjectService {
 
     return { success: true, message: 'Project deleted successfully' };
   }
+
+  static async getProjectMembersSummary(projectId: string) {
+    const existing = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      throw { statusCode: 404, message: 'Project not found' };
+    }
+
+    // 1. Identify completed/done lane
+    const lanes = await prisma.lane.findMany({
+      where: { projectId, deletedAt: null },
+      orderBy: { position: 'asc' },
+      select: { id: true, name: true },
+    });
+
+    let doneLaneId: string | null = null;
+    const doneLane = lanes.find((l) =>
+      /done|complete|closed|finished/i.test(l.name)
+    );
+    if (doneLane) {
+      doneLaneId = doneLane.id;
+    } else if (lanes.length > 1) {
+      doneLaneId = lanes[lanes.length - 1].id;
+    }
+
+    // 2. Fetch project members with user info
+    const members = await prisma.projectMember.findMany({
+      where: {
+        projectId,
+        user: { deletedAt: null },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // 3. Query all active cards in this project with an assignee
+    const cards = await prisma.card.findMany({
+      where: {
+        projectId,
+        deletedAt: null,
+        assigneeId: { not: null },
+      },
+      select: {
+        id: true,
+        assigneeId: true,
+        dueDate: true,
+        laneId: true,
+      },
+    });
+
+    // 4. Compute counts per assignee in-memory (O(N), < 0.1ms)
+    const nowTime = Date.now();
+    const assignedCountsByAssignee = new Map<string, number>();
+    const breachedCountsByAssignee = new Map<string, number>();
+
+    for (const card of cards) {
+      if (!card.assigneeId) continue;
+      const assignee = card.assigneeId;
+
+      assignedCountsByAssignee.set(
+        assignee,
+        (assignedCountsByAssignee.get(assignee) || 0) + 1
+      );
+
+      const isBreached =
+        Boolean(card.dueDate) &&
+        new Date(card.dueDate!).getTime() < nowTime &&
+        (!doneLaneId || card.laneId !== doneLaneId);
+
+      if (isBreached) {
+        breachedCountsByAssignee.set(
+          assignee,
+          (breachedCountsByAssignee.get(assignee) || 0) + 1
+        );
+      }
+    }
+
+    return members.map((m) => {
+      const idCount = assignedCountsByAssignee.get(m.user.id) || 0;
+      const usernameCount = assignedCountsByAssignee.get(m.user.username) || 0;
+      const totalAssigned = idCount + usernameCount;
+
+      const idBreached = breachedCountsByAssignee.get(m.user.id) || 0;
+      const usernameBreached = breachedCountsByAssignee.get(m.user.username) || 0;
+      const totalBreached = idBreached + usernameBreached;
+
+      return {
+        id: m.id,
+        userId: m.user.id,
+        name: m.user.name,
+        username: m.user.username,
+        role: m.user.role,
+        assignedCardsCount: totalAssigned,
+        hasBreachedCard: totalBreached > 0,
+        breachedCardsCount: totalBreached,
+      };
+    });
+  }
 }

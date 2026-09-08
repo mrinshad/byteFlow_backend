@@ -69,6 +69,20 @@ export class ProjectController {
     }
   }
 
+  static async getMembersSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const summary = await ProjectService.getProjectMembersSummary(id);
+
+      res.status(200).json({
+        success: true,
+        data: summary,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;

@@ -99,6 +99,7 @@ model Project {
   id          String    @id @default(uuid())
   name        String
   description String?
+  cardCounter Int       @default(0)
 
   createdBy   String?
   createdAt   DateTime  @default(now())
@@ -144,6 +145,7 @@ model Card {
   id          String    @id @default(uuid())
   projectId   String
   laneId      String
+  number      Int       @default(1)
 
   title       String
   description String?
@@ -168,6 +170,7 @@ model Card {
   activityLogs ActivityLog[]
 
   @@index([projectId, laneId, deletedAt])
+  @@index([projectId, number])
   @@index([position])
 }
 

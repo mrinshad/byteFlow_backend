@@ -123,10 +123,18 @@ export class CardService {
     });
 
     const card = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.update({
+        where: { id: input.projectId },
+        data: { cardCounter: { increment: 1 } },
+        select: { cardCounter: true },
+      });
+      const cardNumber = project.cardCounter;
+
       const created = await tx.card.create({
         data: {
           projectId: input.projectId,
           laneId: input.laneId,
+          number: cardNumber,
           title: trimmedTitle,
           description: input.description?.trim() || null,
           priority: input.priority || Priority.MEDIUM,
@@ -258,9 +266,14 @@ export class CardService {
 
     if (filters?.search?.trim()) {
       const search = filters.search.trim();
+      const parsedNumber = search.startsWith('#')
+        ? parseInt(search.slice(1), 10)
+        : parseInt(search, 10);
+
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
+        ...(!isNaN(parsedNumber) ? [{ number: parsedNumber }] : []),
       ];
     }
 

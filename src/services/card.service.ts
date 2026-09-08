@@ -82,6 +82,18 @@ export class CardService {
       }
     }
 
+    let resolvedAssigneeId: string | null = null;
+    if (input.assigneeId) {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [{ id: input.assigneeId }, { username: input.assigneeId }],
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      resolvedAssigneeId = user ? user.id : input.assigneeId;
+    }
+
     const card = await prisma.$transaction(async (tx) => {
       const created = await tx.card.create({
         data: {
@@ -91,7 +103,7 @@ export class CardService {
           description: input.description?.trim() || null,
           priority: input.priority || Priority.MEDIUM,
           dueDate: parsedDueDate,
-          assigneeId: input.assigneeId || null,
+          assigneeId: resolvedAssigneeId,
           position,
           createdBy: input.createdBy || null,
         },
@@ -324,17 +336,30 @@ export class CardService {
       });
     }
 
-    if (input.assigneeId !== undefined && input.assigneeId !== existing.assigneeId) {
-      updateData.assigneeId = input.assigneeId || null;
-      activitiesToCreate.push({
-        projectId: existing.projectId,
-        cardId: id,
-        laneId: existing.laneId,
-        performedBy: input.performedBy || null,
-        action: input.assigneeId ? ActivityAction.ASSIGN_USER : ActivityAction.UNASSIGN_USER,
-        oldValue: { assigneeId: existing.assigneeId },
-        newValue: { assigneeId: input.assigneeId },
-      });
+    if (input.assigneeId !== undefined) {
+      let resolvedAssigneeId: string | null = null;
+      if (input.assigneeId) {
+        const user = await prisma.user.findFirst({
+          where: {
+            OR: [{ id: input.assigneeId }, { username: input.assigneeId }],
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        resolvedAssigneeId = user ? user.id : input.assigneeId;
+      }
+      if (resolvedAssigneeId !== existing.assigneeId) {
+        updateData.assigneeId = resolvedAssigneeId;
+        activitiesToCreate.push({
+          projectId: existing.projectId,
+          cardId: id,
+          laneId: existing.laneId,
+          performedBy: input.performedBy || null,
+          action: resolvedAssigneeId ? ActivityAction.ASSIGN_USER : ActivityAction.UNASSIGN_USER,
+          oldValue: { assigneeId: existing.assigneeId },
+          newValue: { assigneeId: resolvedAssigneeId },
+        });
+      }
     }
 
     const updated = await prisma.$transaction(async (tx) => {

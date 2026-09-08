@@ -16,9 +16,34 @@ export interface CreateNotificationInput {
 
 export class NotificationService {
   static async createNotification(input: CreateNotificationInput) {
+    if (!input.userId) return null;
+
+    let targetUserId = input.userId;
+
+    // Check if recipient exists by ID (UUID)
+    const userById = await prisma.user.findFirst({
+      where: { id: targetUserId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!userById) {
+      // If not found by ID, check if username was passed instead
+      const userByUsername = await prisma.user.findFirst({
+        where: { username: targetUserId, deletedAt: null },
+        select: { id: true },
+      });
+
+      if (userByUsername) {
+        targetUserId = userByUsername.id;
+      } else {
+        console.warn(`[NotificationService] Skipping notification for non-existent userId/username: ${input.userId}`);
+        return null;
+      }
+    }
+
     const notification = await prisma.notification.create({
       data: {
-        userId: input.userId,
+        userId: targetUserId,
         senderId: input.senderId || null,
         senderName: input.senderName || null,
         type: input.type,
@@ -31,7 +56,7 @@ export class NotificationService {
     });
 
     // Emit live real-time event to recipient
-    emitToUser(input.userId, 'notification:new', notification);
+    emitToUser(targetUserId, 'notification:new', notification);
 
     return notification;
   }

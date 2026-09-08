@@ -30,7 +30,7 @@ export class TagService {
       throw { statusCode: 404, message: 'Project not found' };
     }
 
-    // Check unique tag name in project
+    // Check if active tag already exists in this project - if so, reuse it!
     const existing = await prisma.tag.findFirst({
       where: {
         projectId: input.projectId,
@@ -40,7 +40,29 @@ export class TagService {
     });
 
     if (existing) {
-      throw { statusCode: 400, message: `A tag named "${trimmedName}" already exists in this project` };
+      return existing;
+    }
+
+    // If tag was soft-deleted in this project, restore and reuse it
+    const existingDeleted = await prisma.tag.findFirst({
+      where: {
+        projectId: input.projectId,
+        name: { equals: trimmedName, mode: 'insensitive' },
+        deletedAt: { not: null },
+      },
+    });
+
+    if (existingDeleted) {
+      const restored = await prisma.tag.update({
+        where: { id: existingDeleted.id },
+        data: {
+          deletedAt: null,
+          deletedBy: null,
+          color: input.color || existingDeleted.color,
+        },
+      });
+      emitToProject(input.projectId, 'tag:created', restored);
+      return restored;
     }
 
     const tag = await prisma.$transaction(async (tx) => {

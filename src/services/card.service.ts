@@ -66,14 +66,33 @@ export class CardService {
       throw { statusCode: 404, message: 'Lane not found in this project' };
     }
 
-    // Calculate position in target lane
-    const lastCard = await prisma.card.findFirst({
+    // Calculate position in target lane so the newest card is placed on top
+    const firstCard = await prisma.card.findFirst({
       where: { laneId: input.laneId, deletedAt: null },
-      orderBy: { position: 'desc' },
+      orderBy: { position: 'asc' },
       select: { position: true },
     });
 
-    const position = lastCard ? lastCard.position + 65536 : 65536;
+    let position = 65536;
+    if (firstCard) {
+      if (firstCard.position > 1) {
+        position = firstCard.position / 2;
+      } else {
+        // Rebalance positions if numbers get too small to prevent underflow
+        const allCards = await prisma.card.findMany({
+          where: { laneId: input.laneId, deletedAt: null },
+          orderBy: { position: 'asc' },
+          select: { id: true },
+        });
+        for (let i = 0; i < allCards.length; i++) {
+          await prisma.card.update({
+            where: { id: allCards[i].id },
+            data: { position: (i + 2) * 65536 },
+          });
+        }
+        position = 65536;
+      }
+    }
 
     let parsedDueDate: Date | null = null;
     if (input.dueDate) {

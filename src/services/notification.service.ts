@@ -61,6 +61,72 @@ export class NotificationService {
     return notification;
   }
 
+  private static async getValidEntityIds(
+    items: { cardId?: string | null; projectId?: string | null; commentId?: string | null }[]
+  ) {
+    const cardIds = [...new Set(items.filter((n) => n.cardId).map((n) => n.cardId!))];
+    const projectIds = [...new Set(items.filter((n) => n.projectId).map((n) => n.projectId!))];
+    const commentIds = [...new Set(items.filter((n) => n.commentId).map((n) => n.commentId!))];
+
+    const [existingCards, existingProjects, existingComments] = await Promise.all([
+      cardIds.length > 0
+        ? prisma.card.findMany({
+            where: {
+              id: { in: cardIds },
+              deletedAt: null,
+              project: { deletedAt: null },
+            },
+            select: { id: true },
+          })
+        : [],
+      projectIds.length > 0
+        ? prisma.project.findMany({
+            where: {
+              id: { in: projectIds },
+              deletedAt: null,
+            },
+            select: { id: true },
+          })
+        : [],
+      commentIds.length > 0
+        ? prisma.comment.findMany({
+            where: {
+              id: { in: commentIds },
+              deletedAt: null,
+              card: { deletedAt: null },
+            },
+            select: { id: true },
+          })
+        : [],
+    ]);
+
+    return {
+      validCardIds: new Set(existingCards.map((c) => c.id)),
+      validProjectIds: new Set(existingProjects.map((p) => p.id)),
+      validCommentIds: new Set(existingComments.map((c) => c.id)),
+    };
+  }
+
+  private static isNotificationValid(
+    n: { cardId?: string | null; projectId?: string | null; commentId?: string | null },
+    validSets: {
+      validCardIds: Set<string>;
+      validProjectIds: Set<string>;
+      validCommentIds: Set<string>;
+    }
+  ) {
+    if (n.cardId && !validSets.validCardIds.has(n.cardId)) {
+      return false;
+    }
+    if (n.projectId && !validSets.validProjectIds.has(n.projectId)) {
+      return false;
+    }
+    if (n.commentId && !validSets.validCommentIds.has(n.commentId)) {
+      return false;
+    }
+    return true;
+  }
+
   static async getUserNotifications(
     userId: string,
     options?: { type?: 'MENTION' | 'ALL'; page?: number; limit?: number }
@@ -74,7 +140,7 @@ export class NotificationService {
       where.type = NotificationType.MENTION;
     }
 
-    const [items, total, unreadCount] = await Promise.all([
+    const [items, total] = await Promise.all([
       prisma.notification.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -82,11 +148,15 @@ export class NotificationService {
         take: limit,
       }),
       prisma.notification.count({ where }),
-      prisma.notification.count({ where: { userId, isRead: false } }),
     ]);
 
+    // Filter out notifications whose referenced entities (card, project, comment) no longer exist
+    const validSets = await this.getValidEntityIds(items);
+    const filteredItems = items.filter((n) => this.isNotificationValid(n, validSets));
+    const { unreadCount } = await this.getUnreadCount(userId);
+
     return {
-      data: items,
+      data: filteredItems,
       meta: {
         total,
         page,
@@ -98,10 +168,19 @@ export class NotificationService {
   }
 
   static async getUnreadCount(userId: string) {
-    const unreadCount = await prisma.notification.count({
+    const unread = await prisma.notification.findMany({
       where: { userId, isRead: false },
+      select: { id: true, cardId: true, projectId: true, commentId: true },
     });
-    return { unreadCount };
+
+    if (unread.length === 0) {
+      return { unreadCount: 0 };
+    }
+
+    const validSets = await this.getValidEntityIds(unread);
+    const validUnreadCount = unread.filter((n) => this.isNotificationValid(n, validSets)).length;
+
+    return { unreadCount: validUnreadCount };
   }
 
   static async markAsRead(notificationId: string, userId: string) {

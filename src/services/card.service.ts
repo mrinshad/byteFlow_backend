@@ -2,6 +2,7 @@ import { prisma } from '../prisma.js';
 import { ActivityAction, Priority, NotificationType } from '@prisma/client';
 import { emitToProject } from '../socket.js';
 import { NotificationService } from './notification.service.js';
+import { TagService } from './tag.service.js';
 
 export interface CreateCardInput {
   projectId: string;
@@ -94,6 +95,14 @@ export class CardService {
       resolvedAssigneeId = user ? user.id : input.assigneeId;
     }
 
+    // Find or create origin lane tag (reusing existing project tag without duplicating)
+    const laneTag = await TagService.createTag({
+      projectId: input.projectId,
+      name: lane.name,
+      color: lane.color || '#6366f1',
+      createdBy: input.createdBy,
+    });
+
     const card = await prisma.$transaction(async (tx) => {
       const created = await tx.card.create({
         data: {
@@ -106,6 +115,11 @@ export class CardService {
           assigneeId: resolvedAssigneeId,
           position,
           createdBy: input.createdBy || null,
+          tags: {
+            create: {
+              tagId: laneTag.id,
+            },
+          },
         },
         include: {
           lane: {

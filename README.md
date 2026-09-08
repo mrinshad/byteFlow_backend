@@ -29,13 +29,19 @@ npx prisma migrate dev
 npx prisma generate
 ```
 
-### 3. Run in Development Mode
+### 3. Seed Marketing Data
+```bash
+npm run seed
+```
+Populates the database with 6 realistic projects, 27 workflow lanes, 40+ cards, tags, comments with mentions, activity logs, and personas across all roles.
+
+### 4. Run in Development Mode
 ```bash
 npm run dev
 ```
 The server will start on `http://localhost:5000`.
 
-### 4. Run Multi-Level Stress & Functional Test Suite
+### 5. Run Multi-Level Stress & Functional Test Suite
 ```bash
 npm run test:stress
 ```

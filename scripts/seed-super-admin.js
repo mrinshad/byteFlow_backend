@@ -4,7 +4,28 @@ import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Role } from '@prisma/client';
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+function createPoolConfig() {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL must be set before seeding the database.');
+  }
+
+  const url = new URL(databaseUrl);
+  const hasPassword = Boolean(url.password);
+  const isLocalHost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
+  if (!hasPassword && isLocalHost) {
+    return {
+      user: decodeURIComponent(url.username),
+      database: decodeURIComponent(url.pathname.slice(1)),
+    };
+  }
+
+  return { connectionString: databaseUrl };
+}
+
+const pool = new pg.Pool(createPoolConfig());
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 

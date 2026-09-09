@@ -19,6 +19,7 @@ export class ActivityService {
   private static async enrichActivities(activities: any[]) {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const userIds = new Set<string>();
+    const laneIds = new Set<string>();
 
     for (const act of activities) {
       if (act.performedBy && uuidRegex.test(act.performedBy)) {
@@ -26,6 +27,22 @@ export class ActivityService {
       }
       if (act.newValue?.assigneeId && uuidRegex.test(act.newValue.assigneeId)) {
         userIds.add(act.newValue.assigneeId);
+      }
+      if (act.oldValue?.laneId && !act.oldValue?.laneName && uuidRegex.test(act.oldValue.laneId)) {
+        laneIds.add(act.oldValue.laneId);
+      }
+    }
+
+    if (laneIds.size > 0) {
+      const lanes = await prisma.lane.findMany({
+        where: { id: { in: Array.from(laneIds) } },
+        select: { id: true, name: true, color: true },
+      });
+      const laneMap = new Map(lanes.map((l) => [l.id, l.name]));
+      for (const act of activities) {
+        if (act.oldValue?.laneId && !act.oldValue?.laneName && laneMap.has(act.oldValue.laneId)) {
+          act.oldValue.laneName = laneMap.get(act.oldValue.laneId);
+        }
       }
     }
 

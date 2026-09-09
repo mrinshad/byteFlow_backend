@@ -174,6 +174,8 @@ export class CardService {
             dueDate: created.dueDate,
             assigneeId: created.assigneeId,
             position: created.position,
+            laneId: created.laneId,
+            laneName: created.lane?.name,
           },
         },
       });
@@ -475,6 +477,9 @@ export class CardService {
   static async moveCard(id: string, input: MoveCardInput) {
     const existing = await prisma.card.findFirst({
       where: { id, deletedAt: null },
+      include: {
+        lane: { select: { id: true, name: true } },
+      },
     });
 
     if (!existing) {
@@ -519,8 +524,8 @@ export class CardService {
             laneId: input.targetLaneId,
             performedBy: input.performedBy || null,
             action: ActivityAction.MOVE_CARD,
-            oldValue: { laneId: existing.laneId, position: existing.position },
-            newValue: { laneId: input.targetLaneId, position: input.position },
+            oldValue: { laneId: existing.laneId, laneName: existing.lane?.name, position: existing.position },
+            newValue: { laneId: input.targetLaneId, laneName: targetLane.name, position: input.position },
           },
         });
       }

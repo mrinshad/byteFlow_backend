@@ -1,5 +1,5 @@
 import { prisma } from '../prisma.js';
-import { ActivityAction, Priority, NotificationType } from '@prisma/client';
+import { ActivityAction, Priority, NotificationType, Role } from '@prisma/client';
 import { emitToProject } from '../socket.js';
 import { NotificationService } from './notification.service.js';
 import { TagService } from './tag.service.js';
@@ -298,9 +298,9 @@ export class CardService {
     });
   }
 
-  static async getCardById(id: string) {
+  static async getCardById(id: string, callerRole?: Role) {
     const card = await prisma.card.findFirst({
-      where: { id, deletedAt: null },
+      where: { id },
       include: {
         lane: {
           select: {
@@ -325,6 +325,16 @@ export class CardService {
 
     if (!card) {
       throw { statusCode: 404, message: 'Card not found' };
+    }
+
+    if (card.deletedAt) {
+      const canViewDeleted =
+        callerRole === Role.ADMIN ||
+        callerRole === Role.SUPER_ADMIN ||
+        callerRole === Role.MANAGER;
+      if (!canViewDeleted) {
+        throw { statusCode: 404, message: 'Card not found' };
+      }
     }
 
     return card;

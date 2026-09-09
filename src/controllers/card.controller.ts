@@ -37,6 +37,12 @@ export class CardController {
       const { laneId, priority, assigneeId, tagId, dueDateFilter, fromDate, toDate, search, includeDeleted } =
         req.query;
 
+      const canViewDeleted =
+        req.user?.role === 'ADMIN' ||
+        req.user?.role === 'SUPER_ADMIN' ||
+        req.user?.role === 'MANAGER';
+      const shouldIncludeDeleted = Boolean(canViewDeleted && includeDeleted === 'true');
+
       const cards = await CardService.getCardsByProject(projectId, {
         laneId: typeof laneId === 'string' ? laneId : undefined,
         priority: priority as any,
@@ -46,7 +52,7 @@ export class CardController {
         fromDate: typeof fromDate === 'string' ? fromDate : undefined,
         toDate: typeof toDate === 'string' ? toDate : undefined,
         search: typeof search === 'string' ? search : undefined,
-        includeDeleted: includeDeleted === 'true',
+        includeDeleted: shouldIncludeDeleted,
       });
 
       res.status(200).json({
@@ -61,7 +67,7 @@ export class CardController {
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
-      const card = await CardService.getCardById(id);
+      const card = await CardService.getCardById(id, req.user?.role);
 
       res.status(200).json({
         success: true,

@@ -94,7 +94,7 @@ export class CommentService {
 
   static async getCommentsByCard(cardId: string) {
     const card = await prisma.card.findFirst({
-      where: { id: cardId, deletedAt: null },
+      where: { id: cardId },
     });
 
     if (!card) {
@@ -136,11 +136,15 @@ export class CommentService {
   ) {
     const existing = await prisma.comment.findFirst({
       where: { id, deletedAt: null },
-      include: { card: { select: { projectId: true } } },
+      include: { card: { select: { projectId: true, deletedAt: true } } },
     });
 
     if (!existing) {
       throw { statusCode: 404, message: 'Comment not found' };
+    }
+
+    if (existing.card?.deletedAt) {
+      throw { statusCode: 400, message: 'Cannot edit comments on a deleted card' };
     }
 
     if (user && !this.isCommentAuthor(existing.createdBy, user)) {
@@ -194,11 +198,15 @@ export class CommentService {
   ) {
     const existing = await prisma.comment.findFirst({
       where: { id, deletedAt: null },
-      include: { card: { select: { projectId: true } } },
+      include: { card: { select: { projectId: true, deletedAt: true } } },
     });
 
     if (!existing) {
       throw { statusCode: 404, message: 'Comment not found' };
+    }
+
+    if (existing.card?.deletedAt) {
+      throw { statusCode: 400, message: 'Cannot delete comments on a deleted card' };
     }
 
     const userObj =

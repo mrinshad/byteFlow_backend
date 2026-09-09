@@ -1,5 +1,6 @@
 import { prisma } from '../prisma.js';
 import { ActivityAction, Role } from '@prisma/client';
+import { emitGlobal, emitToProject } from '../socket.js';
 
 export interface CreateProjectInput {
   name: string;
@@ -28,6 +29,34 @@ export interface GetProjectsQuery {
 }
 
 export class ProjectService {
+  static slugify(text: string): string {
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  static async generateUniqueSlug(name: string, tx: any = prisma): Promise<string> {
+    const baseSlug = ProjectService.slugify(name) || 'project';
+    let candidate = baseSlug;
+    let counter = 1;
+
+    while (true) {
+      const existing = await tx.project.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+
+      candidate = `${baseSlug}-${counter}`;
+      counter++;
+    }
+  }
+
   static async createProject(input: CreateProjectInput) {
     // Only ADMIN or MANAGER can create projects
     if (input.userRole && input.userRole === Role.MEMBER) {
@@ -39,10 +68,12 @@ export class ProjectService {
       throw { statusCode: 400, message: 'Project name is required' };
     }
 
-    return await prisma.$transaction(async (tx) => {
-      const project = await tx.project.create({
+    const project = await prisma.$transaction(async (tx) => {
+      const slug = await ProjectService.generateUniqueSlug(trimmedName, tx);
+      const createdProject = await tx.project.create({
         data: {
           name: trimmedName,
+          slug,
           description: input.description?.trim() || null,
           createdBy: input.createdBy || null,
         },
@@ -52,7 +83,7 @@ export class ProjectService {
       if (input.createdBy) {
         await tx.projectMember.create({
           data: {
-            projectId: project.id,
+            projectId: createdProject.id,
             userId: input.createdBy,
           },
         });
@@ -60,12 +91,12 @@ export class ProjectService {
 
       await tx.activityLog.create({
         data: {
-          projectId: project.id,
+          projectId: createdProject.id,
           performedBy: input.creatorName || input.createdBy || null,
           action: ActivityAction.CREATE_PROJECT,
           newValue: {
-            name: project.name,
-            description: project.description,
+            name: createdProject.name,
+            description: createdProject.description,
           },
         },
       });
@@ -80,7 +111,7 @@ export class ProjectService {
       for (const lane of defaultLanes) {
         const created = await tx.lane.create({
           data: {
-            projectId: project.id,
+            projectId: createdProject.id,
             name: lane.name,
             color: lane.color,
             position: lane.position,
@@ -90,7 +121,7 @@ export class ProjectService {
 
         await tx.activityLog.create({
           data: {
-            projectId: project.id,
+            projectId: createdProject.id,
             laneId: created.id,
             performedBy: input.creatorName || input.createdBy || null,
             action: ActivityAction.CREATE_LANE,
@@ -103,8 +134,12 @@ export class ProjectService {
         });
       }
 
-      return project;
+      return createdProject;
     });
+
+    emitGlobal('project:created', { project });
+
+    return project;
   }
 
   static async getProjects(params: GetProjectsQuery) {
@@ -185,11 +220,12 @@ export class ProjectService {
     };
   }
 
-  static async getProjectById(id: string, userId?: string, userRole?: Role) {
+  static async getProjectById(identifier: string, userId?: string, userRole?: Role) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
     const project = await prisma.project.findFirst({
       where: {
-        id,
         deletedAt: null,
+        ...(isUuid ? { OR: [{ id: identifier }, { slug: identifier }] } : { slug: identifier }),
       },
       include: {
         lanes: {
@@ -265,8 +301,8 @@ export class ProjectService {
       updateData.description = input.description.trim() || null;
     }
 
-    return await prisma.$transaction(async (tx) => {
-      const updated = await tx.project.update({
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedProject = await tx.project.update({
         where: { id },
         data: updateData,
       });
@@ -281,14 +317,19 @@ export class ProjectService {
             description: existing.description,
           },
           newValue: {
-            name: updated.name,
-            description: updated.description,
+            name: updatedProject.name,
+            description: updatedProject.description,
           },
         },
       });
 
-      return updated;
+      return updatedProject;
     });
+
+    emitGlobal('project:updated', { project: updated });
+    emitToProject(id, 'project:updated', { project: updated });
+
+    return updated;
   }
 
   static async deleteProject(id: string, performedBy?: string, userRole?: Role) {
@@ -355,18 +396,27 @@ export class ProjectService {
       });
     });
 
+    emitGlobal('project:deleted', { projectId: id });
+    emitToProject(id, 'project:deleted', { projectId: id });
+
     return { success: true, message: 'Project deleted successfully' };
   }
 
-  static async getProjectMembersSummary(projectId: string) {
+  static async getProjectMembersSummary(identifier: string) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
     const existing = await prisma.project.findFirst({
-      where: { id: projectId, deletedAt: null },
+      where: {
+        deletedAt: null,
+        ...(isUuid ? { OR: [{ id: identifier }, { slug: identifier }] } : { slug: identifier }),
+      },
       select: { id: true },
     });
 
     if (!existing) {
       throw { statusCode: 404, message: 'Project not found' };
     }
+
+    const projectId = existing.id;
 
     // 1. Identify completed/done lane
     const lanes = await prisma.lane.findMany({

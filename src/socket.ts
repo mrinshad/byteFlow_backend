@@ -57,3 +57,9 @@ export function emitToUser(userId: string, event: string, data?: any) {
     io.to(`user:${userId}`).emit(event, data);
   }
 }
+
+export function emitGlobal(event: string, data?: any) {
+  if (io) {
+    io.emit(event, data);
+  }
+}

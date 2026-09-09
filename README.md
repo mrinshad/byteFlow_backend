@@ -67,8 +67,8 @@ Executes all 6 levels of automated tests:
 ### Projects (`/api/projects`)
 - `GET /api/projects` - List active projects for current user
 - `POST /api/projects` - Create a project
-- `GET /api/projects/:id` - Get project details
-- `GET /api/projects/:id/members-summary` - Get project members summary (assigned cards count, breach status)
+- `GET /api/projects/:id` - Get project details (accepts UUID `id` or human-readable `slug`)
+- `GET /api/projects/:id/members-summary` - Get project members summary (assigned cards count, breach status; accepts UUID `id` or `slug`)
 - `PATCH /api/projects/:id` - Update project details
 - `DELETE /api/projects/:id` - Soft delete project and cascade to lanes, cards, tags
 

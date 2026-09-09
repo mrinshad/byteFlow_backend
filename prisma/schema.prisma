@@ -97,6 +97,7 @@ enum ActivityAction {
 
 model Project {
   id          String    @id @default(uuid())
+  slug        String    @unique
   name        String
   description String?
   cardCounter Int       @default(0)
@@ -114,6 +115,7 @@ model Project {
   activityLogs ActivityLog[]
   members      ProjectMember[]
 
+  @@index([slug])
   @@index([deletedAt])
   @@index([createdAt])
 }

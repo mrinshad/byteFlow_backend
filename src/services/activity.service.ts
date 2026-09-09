@@ -125,7 +125,7 @@ export class ActivityService {
         take: limit,
         include: {
           project: {
-            select: { id: true, name: true },
+            select: { id: true, slug: true, name: true },
           },
           card: {
             select: { id: true, title: true },

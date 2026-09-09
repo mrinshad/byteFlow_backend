@@ -3,6 +3,7 @@ import { Role, ActivityAction } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { NotificationService } from './notification.service.js';
 import { ActivityService } from './activity.service.js';
+import { emitGlobal, emitToProject } from '../socket.js';
 
 export class AdminService {
   static async getStats() {
@@ -123,6 +124,7 @@ export class AdminService {
 
       return {
         id: p.id,
+        slug: p.slug,
         name: p.name,
         description: p.description,
         createdBy: p.createdBy,
@@ -209,6 +211,9 @@ export class AdminService {
       });
     });
 
+    emitGlobal('project:created', { projectId: id });
+    emitToProject(id, 'project:updated', { projectId: id });
+
     return { success: true, message: 'Project and underlying data restored successfully' };
   }
 
@@ -288,6 +293,9 @@ export class AdminService {
       });
     }
 
+    emitGlobal('project:updated', { projectId });
+    emitToProject(projectId, 'project:members:updated', { projectId, userIds: uniqueUserIds });
+
     return updatedMembers;
   }
 
@@ -317,6 +325,7 @@ export class AdminService {
             project: {
               select: {
                 id: true,
+                slug: true,
                 name: true,
               },
             },
@@ -337,6 +346,7 @@ export class AdminService {
       createdAt: u.createdAt,
       assignedProjects: u.projectMembers.map((pm) => ({
         id: pm.project.id,
+        slug: pm.project.slug,
         name: pm.project.name,
       })),
     }));
@@ -383,6 +393,8 @@ export class AdminService {
       },
     });
 
+    emitGlobal('user:updated', { user: updated });
+
     return updated;
   }
 
@@ -418,6 +430,8 @@ export class AdminService {
       },
     });
 
+    emitGlobal('user:deleted', { userId });
+
     return { success: true, message: `User @${user.username} deactivated successfully` };
   }
 
@@ -441,6 +455,8 @@ export class AdminService {
         deletedBy: null,
       },
     });
+
+    emitGlobal('user:updated', { userId });
 
     return { success: true, message: `User @${user.username} restored successfully` };
   }
@@ -490,6 +506,8 @@ export class AdminService {
         updatedAt: true,
       },
     });
+
+    emitGlobal('user:updated', { user: updated });
 
     return updated;
   }
@@ -592,6 +610,8 @@ export class AdminService {
         createdAt: true,
       },
     });
+
+    emitGlobal('user:created', { user: newUser });
 
     return newUser;
   }

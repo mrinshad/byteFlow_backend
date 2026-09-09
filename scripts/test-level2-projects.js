@@ -23,8 +23,26 @@ export async function runLevel2() {
   });
   const project = (await res.json()).data;
   assert(project?.id, 'Project creation failed');
+  assert(project?.slug, 'Project must have a slug generated');
+  assertions += 2;
+  console.log(`  ✔ Project created: "${project.name}" (ID: ${project.id}, Slug: ${project.slug})`);
+
+  // Verify fetching by slug works seamlessly
+  const slugRes = await fetch(`${API}/projects/${project.slug}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const projectBySlug = (await slugRes.json()).data;
+  assert.strictEqual(projectBySlug?.id, project.id, 'Project fetched by slug must match original project ID');
   assertions++;
-  console.log(`  ✔ Project created: "${project.name}" (ID: ${project.id})`);
+  console.log(`  ✔ Project lookup by slug "${project.slug}" verified`);
+
+  const membersSummaryRes = await fetch(`${API}/projects/${project.slug}/members-summary`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const membersSummary = (await membersSummaryRes.json()).data;
+  assert(Array.isArray(membersSummary), 'Members summary must be an array');
+  assertions++;
+  console.log(`  ✔ Project members summary lookup by slug "${project.slug}" verified`);
 
   // 3. Fetch auto-created lanes
   res = await fetch(`${API}/lanes/project/${project.id}`, {

@@ -6,15 +6,21 @@ import { ActivityService } from './activity.service.js';
 import { emitGlobal, emitToProject } from '../socket.js';
 
 export class AdminService {
-  static async getStats() {
+  static async getStats(callerRole?: Role) {
+    const isSuperAdmin = callerRole === Role.SUPER_ADMIN;
+    const userWhere: any = { deletedAt: null };
+    if (!isSuperAdmin) {
+      userWhere.role = { not: Role.SUPER_ADMIN };
+    }
+
     const [totalProjects, totalUsers, totalCards, totalLanes, usersByRole, allProjects] = await Promise.all([
       prisma.project.count({ where: { deletedAt: null } }),
-      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.user.count({ where: userWhere }),
       prisma.card.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
       prisma.lane.count({ where: { deletedAt: null, project: { deletedAt: null } } }),
       prisma.user.groupBy({
         by: ['role'],
-        where: { deletedAt: null },
+        where: userWhere,
         _count: true,
       }),
       prisma.project.findMany({
@@ -51,8 +57,8 @@ export class AdminService {
 
     const completionRate = totalCards > 0 ? Math.round((totalCompletedCards / totalCards) * 100) : 0;
 
-    const roleCounts = {
-      SUPER_ADMIN: 0,
+    const roleCounts: Record<string, number> = {
+      ...(isSuperAdmin ? { SUPER_ADMIN: 0 } : {}),
       ADMIN: 0,
       MANAGER: 0,
       MEMBER: 0,
@@ -75,7 +81,7 @@ export class AdminService {
     };
   }
 
-  static async getProjects(includeDeleted = false) {
+  static async getProjects(includeDeleted = false, callerRole?: Role) {
     const where: any = {};
     if (!includeDeleted) {
       where.deletedAt = null;
@@ -114,6 +120,8 @@ export class AdminService {
       },
     });
 
+    const isSuperAdmin = callerRole === Role.SUPER_ADMIN;
+
     return projects.map((p) => {
       const totalCards = p._count.cards;
       const doneLanes = p.lanes.filter((l) =>
@@ -121,6 +129,7 @@ export class AdminService {
       );
       const completedCards = doneLanes.reduce((sum, l) => sum + l._count.cards, 0);
       const completionPercentage = totalCards > 0 ? Math.round((completedCards / totalCards) * 100) : 0;
+      const visibleMembers = p.members.filter((m) => isSuperAdmin || m.user.role !== Role.SUPER_ADMIN);
 
       return {
         id: p.id,
@@ -137,12 +146,16 @@ export class AdminService {
         totalCards,
         completedCards,
         completionPercentage,
-        memberCount: p._count.members,
-        members: p.members.map((m) => ({
-          id: m.id,
+        memberCount: visibleMembers.length,
+        members: visibleMembers.map((m) => ({
           userId: m.userId,
-          user: m.user,
-          createdAt: m.createdAt,
+          joinedAt: m.createdAt,
+          user: {
+            id: m.user.id,
+            name: m.user.name,
+            username: m.user.username,
+            role: m.user.role,
+          },
         })),
       };
     });
@@ -299,10 +312,13 @@ export class AdminService {
     return updatedMembers;
   }
 
-  static async getUsers(includeDeleted = false) {
+  static async getUsers(includeDeleted = false, callerRole?: Role) {
     const where: any = {};
     if (!includeDeleted) {
       where.deletedAt = null;
+    }
+    if (callerRole !== Role.SUPER_ADMIN) {
+      where.role = { not: Role.SUPER_ADMIN };
     }
 
     const users = await prisma.user.findMany({
@@ -616,15 +632,18 @@ export class AdminService {
     return newUser;
   }
 
-  static async getActivityLogs(filters?: {
-    page?: number;
-    limit?: number;
-    projectId?: string;
-    action?: string;
-    userId?: string;
-    from?: string;
-    to?: string;
-  }) {
-    return await ActivityService.getAllActivities(filters);
+  static async getActivityLogs(
+    filters?: {
+      page?: number;
+      limit?: number;
+      projectId?: string;
+      action?: string;
+      userId?: string;
+      from?: string;
+      to?: string;
+    },
+    callerRole?: Role
+  ) {
+    return await ActivityService.getAllActivities(filters, callerRole);
   }
 }

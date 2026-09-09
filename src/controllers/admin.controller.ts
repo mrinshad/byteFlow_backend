@@ -2,9 +2,9 @@ import type { Request, Response, NextFunction } from 'express';
 import { AdminService } from '../services/admin.service.js';
 
 export class AdminController {
-  static async getStats(_req: Request, res: Response, next: NextFunction) {
+  static async getStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const stats = await AdminService.getStats();
+      const stats = await AdminService.getStats(req.user?.role);
       res.json({ success: true, data: stats });
     } catch (error) {
       next(error);
@@ -14,7 +14,7 @@ export class AdminController {
   static async getProjects(req: Request, res: Response, next: NextFunction) {
     try {
       const includeDeleted = req.query.includeDeleted === 'true';
-      const projects = await AdminService.getProjects(includeDeleted);
+      const projects = await AdminService.getProjects(includeDeleted, req.user?.role);
       res.json({ success: true, data: projects });
     } catch (error) {
       next(error);
@@ -57,7 +57,7 @@ export class AdminController {
   static async getUsers(req: Request, res: Response, next: NextFunction) {
     try {
       const includeDeleted = req.query.includeDeleted === 'true';
-      const users = await AdminService.getUsers(includeDeleted);
+      const users = await AdminService.getUsers(includeDeleted, req.user?.role);
       res.json({ success: true, data: users });
     } catch (error) {
       next(error);
@@ -177,15 +177,18 @@ export class AdminController {
   static async getActivityLogs(req: Request, res: Response, next: NextFunction) {
     try {
       const { page, limit, projectId, action, userId, from, to } = req.query;
-      const result = await AdminService.getActivityLogs({
-        page: page ? Number(page) : undefined,
-        limit: limit ? Number(limit) : undefined,
-        projectId: projectId ? String(projectId) : undefined,
-        action: action ? String(action) : undefined,
-        userId: userId ? String(userId) : undefined,
-        from: from ? String(from) : undefined,
-        to: to ? String(to) : undefined,
-      });
+      const result = await AdminService.getActivityLogs(
+        {
+          page: page ? Number(page) : undefined,
+          limit: limit ? Number(limit) : undefined,
+          projectId: projectId ? String(projectId) : undefined,
+          action: action ? String(action) : undefined,
+          userId: userId ? String(userId) : undefined,
+          from: from ? String(from) : undefined,
+          to: to ? String(to) : undefined,
+        },
+        req.user?.role
+      );
       res.json({ success: true, ...result });
     } catch (error) {
       next(error);

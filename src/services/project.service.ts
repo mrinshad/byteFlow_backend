@@ -79,14 +79,20 @@ export class ProjectService {
         },
       });
 
-      // Auto-assign creator as project member if createdBy is provided
+      // Auto-assign creator as project member if createdBy is provided (exclude Super Admin)
       if (input.createdBy) {
-        await tx.projectMember.create({
-          data: {
-            projectId: createdProject.id,
-            userId: input.createdBy,
-          },
+        const creator = await tx.user.findUnique({
+          where: { id: input.createdBy },
+          select: { role: true },
         });
+        if (creator && creator.role !== Role.SUPER_ADMIN) {
+          await tx.projectMember.create({
+            data: {
+              projectId: createdProject.id,
+              userId: input.createdBy,
+            },
+          });
+        }
       }
 
       await tx.activityLog.create({
@@ -238,6 +244,9 @@ export class ProjectService {
           },
         },
         members: {
+          where: {
+            user: { deletedAt: null, role: { not: Role.SUPER_ADMIN } },
+          },
           include: {
             user: {
               select: {
@@ -435,11 +444,11 @@ export class ProjectService {
       doneLaneId = lanes[lanes.length - 1].id;
     }
 
-    // 2. Fetch project members with user info
+    // 2. Fetch project members with user info (Super Admin excluded from project members)
     const members = await prisma.projectMember.findMany({
       where: {
         projectId,
-        user: { deletedAt: null },
+        user: { deletedAt: null, role: { not: Role.SUPER_ADMIN } },
       },
       include: {
         user: {

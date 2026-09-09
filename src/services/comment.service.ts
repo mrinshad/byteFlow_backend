@@ -110,7 +110,30 @@ export class CommentService {
     });
   }
 
-  static async updateComment(id: string, input: UpdateCommentInput) {
+  static isCommentAuthor(
+    commentCreatedBy: string | null | undefined,
+    user: { id?: string; name?: string; username?: string; role?: string } | null | undefined
+  ): boolean {
+    if (!commentCreatedBy || !user) return false;
+    const authorNorm = commentCreatedBy.trim().toLowerCase();
+    const userNameNorm = user.name?.trim().toLowerCase();
+    const userUsernameNorm = user.username?.trim().toLowerCase();
+    const userMentionNorm = `@${userUsernameNorm}`;
+    const userIdNorm = user.id?.trim().toLowerCase();
+
+    return (
+      Boolean(userNameNorm && authorNorm === userNameNorm) ||
+      Boolean(userUsernameNorm && authorNorm === userUsernameNorm) ||
+      Boolean(userMentionNorm && authorNorm === userMentionNorm) ||
+      Boolean(userIdNorm && authorNorm === userIdNorm)
+    );
+  }
+
+  static async updateComment(
+    id: string,
+    input: UpdateCommentInput,
+    user?: { id?: string; name?: string; username?: string; role?: string }
+  ) {
     const existing = await prisma.comment.findFirst({
       where: { id, deletedAt: null },
       include: { card: { select: { projectId: true } } },
@@ -120,10 +143,16 @@ export class CommentService {
       throw { statusCode: 404, message: 'Comment not found' };
     }
 
+    if (user && !this.isCommentAuthor(existing.createdBy, user)) {
+      throw { statusCode: 403, message: 'You can only edit your own comments' };
+    }
+
     const trimmedComment = input.comment?.trim();
     if (!trimmedComment) {
       throw { statusCode: 400, message: 'Comment content cannot be empty' };
     }
+
+    const performer = user?.name || user?.username || input.performedBy || null;
 
     const updated = await prisma.$transaction(async (tx) => {
       const result = await tx.comment.update({
@@ -138,7 +167,7 @@ export class CommentService {
           projectId: existing.card.projectId,
           cardId: existing.cardId,
           commentId: id,
-          performedBy: input.performedBy || null,
+          performedBy: performer,
           action: ActivityAction.UPDATE_COMMENT,
           oldValue: {
             comment: existing.comment,
@@ -159,7 +188,10 @@ export class CommentService {
     return updated;
   }
 
-  static async deleteComment(id: string, performedBy?: string) {
+  static async deleteComment(
+    id: string,
+    user?: { id?: string; name?: string; username?: string; role?: string } | string
+  ) {
     const existing = await prisma.comment.findFirst({
       where: { id, deletedAt: null },
       include: { card: { select: { projectId: true } } },
@@ -169,12 +201,23 @@ export class CommentService {
       throw { statusCode: 404, message: 'Comment not found' };
     }
 
+    const userObj =
+      typeof user === 'string'
+        ? { name: user, username: user }
+        : user;
+
+    if (userObj && !this.isCommentAuthor(existing.createdBy, userObj)) {
+      throw { statusCode: 403, message: 'You can only delete your own comments' };
+    }
+
+    const performer = typeof user === 'string' ? user : user?.name || user?.username || null;
+
     await prisma.$transaction(async (tx) => {
       await tx.comment.update({
         where: { id },
         data: {
           deletedAt: new Date(),
-          deletedBy: performedBy || null,
+          deletedBy: performer,
         },
       });
 
@@ -183,7 +226,7 @@ export class CommentService {
           projectId: existing.card.projectId,
           cardId: existing.cardId,
           commentId: id,
-          performedBy: performedBy || null,
+          performedBy: performer,
           action: ActivityAction.DELETE_COMMENT,
           oldValue: {
             comment: existing.comment,

@@ -7,7 +7,7 @@ export class ActivityController {
       const cardId = req.params.cardId as string;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
 
-      const activities = await ActivityService.getCardActivities(cardId, limit);
+      const activities = await ActivityService.getCardActivities(cardId, limit, req.user?.role);
 
       res.status(200).json({
         success: true,
@@ -23,7 +23,7 @@ export class ActivityController {
       const projectId = req.params.projectId as string;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
 
-      const activities = await ActivityService.getProjectActivities(projectId, limit);
+      const activities = await ActivityService.getProjectActivities(projectId, limit, req.user?.role);
 
       res.status(200).json({
         success: true,
